@@ -3,7 +3,7 @@
 //  VocabRoady
 //
 //  Apple CarPlay Automotive Template Interface.
-//  Zero visual distraction; audio-first with voice command hints and glanceable metadata.
+//  Zero visual distraction; audio-first with CPVoiceControlTemplate integration.
 //
 
 import CarPlay
@@ -37,6 +37,27 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
         VoiceCommander.shared.stopListening()
     }
 
+    // MARK: - Voice Control Template Modal
+
+    public func presentVoiceConversationOverlay() {
+        guard let controller = interfaceController else { return }
+
+        let state = CPVoiceControlState(
+            identifier: "VocabRoadyListening",
+            titleVariants: [
+                "VocabRoady Voice Active",
+                "Say: 'Next', 'Repeat', 'Mastered'",
+                "Say: 'Explain', 'Example', 'Root'"
+            ],
+            image: nil,
+            repeats: true
+        )
+
+        let voiceTemplate = CPVoiceControlTemplate(voiceControlStates: [state])
+        voiceTemplate.activateVoiceControlState(withIdentifier: "VocabRoadyListening")
+        controller.presentTemplate(voiceTemplate, animated: true, completion: nil)
+    }
+
     // MARK: - Template Architecture
 
     private func buildTabBarTemplate() -> CPTabBarTemplate {
@@ -54,20 +75,33 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
     }
 
     private func buildCommuteSprintTemplate() -> CPListTemplate {
-        let items: [CPListItem] = CurriculumData.words.prefix(8).enumerated().map { index, word in
+        // Voice conversation trigger item
+        let voiceItem = CPListItem(
+            text: "🎙️ Start Voice Conversation",
+            detailText: "Hands-free continuous driving vocabulary tutor"
+        )
+        voiceItem.handler = { [weak self] _, completion in
+            VoiceManager.shared.startDeck(CurriculumData.words, startingAt: 0)
+            self?.presentVoiceConversationOverlay()
+            completion()
+        }
+
+        let items: [CPListItem] = CurriculumData.words.prefix(10).enumerated().map { index, word in
             let item = CPListItem(
                 text: word.word,
                 detailText: "\(word.partOfSpeech) • \(word.shortDefinition)"
             )
             item.handler = { [weak self] _, completion in
                 VoiceManager.shared.startDeck(CurriculumData.words, startingAt: index)
+                self?.presentVoiceConversationOverlay()
                 completion()
             }
             return item
         }
 
-        let section = CPListSection(items: items, header: "🎙️ Hands-Free Commute (Say 'Next', 'Repeat', 'Mastered')", sectionIndexTitle: nil)
-        let list = CPListTemplate(title: "Commute Sprint", sections: [section])
+        let mainSection = CPListSection(items: [voiceItem], header: "Voice Command Mode", sectionIndexTitle: nil)
+        let wordSection = CPListSection(items: items, header: "Today's High-Yield Words", sectionIndexTitle: nil)
+        let list = CPListTemplate(title: "Commute Sprint", sections: [mainSection, wordSection])
         list.tabTitle = "Daily Drive"
         list.tabSystemItem = .mostRecent
         return list
@@ -82,6 +116,7 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
             )
             item.handler = { [weak self] _, completion in
                 VoiceManager.shared.startDeck(wordsForTier, startingAt: index)
+                self?.presentVoiceConversationOverlay()
                 completion()
             }
             return item
