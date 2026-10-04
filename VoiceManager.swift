@@ -3,18 +3,21 @@
 //  Hands-Free Vocab
 //
 //  Automotive Audio Director & Spaced Repetition Playback Orchestrator.
+//  Matches Hands-Free Lingo audio session priority and route-holding architecture.
 //
 
 import Foundation
 import AVFoundation
 import MediaPlayer
 import Combine
+import UIKit
 
 public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObject, VoiceCommandDelegate {
     public static let shared = VoiceManager()
 
     private var player: AVAudioPlayer?
-    private var nowPlayingSession: MPNowPlayingInfoCenter = .default()
+    private var completionHandler: (() -> Void)?
+    private var didSetAudioCategory: Bool = false
 
     @Published public var currentWord: VocabWord?
     @Published public var isPlaying: Bool = false
@@ -23,56 +26,64 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
     @Published public var activeIndex: Int = 0
 
     // Timing gaps calibrated for driver cognitive retrieval
-    public var recallWindowSeconds: Double = 4.0
+    public var recallWindowSeconds: Double = 3.5
     private var recallTimer: Timer?
 
     private override init() {
         super.init()
         self.activeDeck = CurriculumData.words
         VoiceCommander.shared.delegate = self
-        configureAudioSession()
-        observeNavigationAndAudioInterruptions()
+        observeInterruptions()
+        observeAppLifecycle()
     }
 
-    private func configureAudioSession() {
+    // MARK: - Audio Session Priority
+
+    public func configureAudioSessionIfNeeded() {
+        guard !didSetAudioCategory else { return }
+        didSetAudioCategory = true
+
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(
-                .playback,
-                mode: .spokenAudio,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
-            )
+            try session.setCategory(.playback,
+                                    mode: .spokenAudio,
+                                    options: [.allowBluetoothA2DP, .allowAirPlay])
             try session.setActive(true, options: [])
-            print("[VoiceManager] Audio session active with duckOthers & spokenAudio.")
+            print("[VoiceManager] Audio session active with .playback / .spokenAudio")
         } catch {
-            print("[VoiceManager] Audio session configuration error: \(error)")
+            print("[VoiceManager] Audio session setCategory error: \(error)")
         }
     }
 
-    private func observeNavigationAndAudioInterruptions() {
+    private func observeInterruptions() {
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard let userInfo = notification.userInfo,
-                  let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-                  let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+        ) { [weak self] note in
+            guard let userInfo = note.userInfo,
+                  let typeVal = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeVal) else { return }
 
-            switch type {
-            case .began:
-                print("[VoiceManager] Interruption began (navigation / phone call). Pausing.")
-                self?.pauseStudySession()
-            case .ended:
-                print("[VoiceManager] Interruption ended. Resuming.")
-                if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
-                    let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-                    if options.contains(.shouldResume) {
-                        self?.resumeStudySession()
-                    }
-                }
-            @unknown default:
-                break
+            if type == .began {
+                self?.player?.pause()
+                self?.isPlaying = false
+                self?.republishNowPlayingRate()
+            } else if type == .ended {
+                try? AVAudioSession.sharedInstance().setActive(true, options: [])
+                self?.player?.play()
+                self?.isPlaying = (self?.player?.isPlaying == true)
+                self?.republishNowPlayingRate()
+            }
+        }
+    }
+
+    private func observeAppLifecycle() {
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            if self?.player?.isPlaying != true {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+                self?.didSetAudioCategory = false
             }
         }
     }
@@ -92,15 +103,12 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
         self.playbackModeDescription = "Presenting Word"
         updateNowPlaying(with: word, status: "Acoustic Hook")
 
-        // 1. Deliver the acoustic hook (word + part of speech + short definition)
         speakText(word.spokenAcousticHook) { [weak self] in
             guard let self = self else { return }
-            self.playbackModeDescription = "Cognitive Recall Window (Listening for voice...)"
+            self.playbackModeDescription = "Listening for voice ('Next', 'Repeat', 'Mastered')..."
 
-            // 2. Open retrieval window (driver can say "Mastered", "Explain", "Example", or "Next")
             self.recallTimer?.invalidate()
             self.recallTimer = Timer.scheduledTimer(withTimeInterval: self.recallWindowSeconds, repeats: false) { [weak self] _ in
-                // After 4s without command, naturally deliver the contextual sentence
                 self?.deliverContextualExample()
             }
         }
@@ -112,7 +120,14 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
         updateNowPlaying(with: word, status: "Contextual Usage")
 
         speakText(word.spokenExampleScript) { [weak self] in
-            self?.playbackModeDescription = "Awaiting Command (Say: 'Next', 'Repeat', 'Mastered', 'Root')"
+            guard let self = self else { return }
+            self.playbackModeDescription = "Awaiting Command ('Next' to proceed)"
+
+            // Auto-advance after 5 seconds if driver stays silent
+            self.recallTimer?.invalidate()
+            self.recallTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+                self?.advanceWord(by: 1)
+            }
         }
     }
 
@@ -141,7 +156,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
     public func didRecognizeCommand(_ command: VocabCommand) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            print("[VoiceManager] Executing Spoken Command: \(command.rawValue)")
+            print("[VoiceManager] 🎯 Executing Voice Command: \(command.rawValue)")
 
             switch command {
             case .next:
@@ -177,8 +192,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
             activeIndex = nextIndex
             presentWord(activeDeck[activeIndex])
         } else if nextIndex >= activeDeck.count {
-            // Loop deck or complete drive session
-            speakText("Commute vocabulary sprint complete. Excellent focus.") { [weak self] in
+            speakText("Daily vocabulary sprint complete. Excellent focus.") { [weak self] in
                 self?.activeIndex = 0
                 if let first = self?.activeDeck.first {
                     self?.presentWord(first)
@@ -193,9 +207,6 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
         word.repetitions += 1
         word.lastReviewedAt = Date()
         currentWord = word
-
-        // Sound a clean positive chime tone or confirmation
-        playAudioConfirmation(isPositive: true)
     }
 
     public func pauseStudySession() {
@@ -203,12 +214,14 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
         player?.pause()
         isPlaying = false
         playbackModeDescription = "Paused"
+        republishNowPlayingRate()
     }
 
     public func resumeStudySession() {
         if let player = player, !player.isPlaying {
             player.play()
             isPlaying = true
+            republishNowPlayingRate()
         } else if let word = currentWord {
             presentWord(word)
         }
@@ -216,9 +229,14 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
 
     // MARK: - Speech Audio Playback Pipeline
 
-    private func speakText(_ text: String, completion: @escaping () -> Void) {
-        let request = AudioRenderRequest(text: text)
-        AudioCache.shared.getAudioURL(for: request) { [weak self] result in
+    public func speakText(_ text: String, completion: @escaping () -> Void) {
+        configureAudioSessionIfNeeded()
+
+        player?.stop()
+        player = nil
+
+        let req = RenderRequest(text: text, localeCode: "en-US", rate: 0.50, pitch: 1.0, volume: 1.0, postGain: 1.0)
+        AudioCache.shared.url(for: req) { [weak self] result in
             guard let self = self else { return }
             switch result {
             case .success(let url):
@@ -228,91 +246,52 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
                     self.player?.prepareToPlay()
                     self.player?.play()
                     self.isPlaying = true
-                    self.onPlaybackCompleted = completion
+                    self.completionHandler = completion
+                    self.republishNowPlayingRate()
                 } catch {
-                    print("[VoiceManager] Playback error: \(error)")
+                    print("[VoiceManager] AVAudioPlayer error: \(error)")
                     completion()
                 }
             case .failure(let error):
-                print("[VoiceManager] TTS caching error: \(error)")
+                print("[VoiceManager] AudioCache error: \(error)")
                 completion()
             }
         }
     }
 
-    private var onPlaybackCompleted: (() -> Void)?
-
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         self.isPlaying = false
-        let handler = onPlaybackCompleted
-        onPlaybackCompleted = nil
+        republishNowPlayingRate()
+        let handler = completionHandler
+        completionHandler = nil
         handler?()
-    }
-
-    private func playAudioConfirmation(isPositive: Bool) {
-        // Subtle spoken feedback confirming voice command recognition
-        let feedback = isPositive ? "Mastered." : "Noted."
-        speakText(feedback) {}
     }
 
     // MARK: - Now Playing Info Center (CarPlay Dashboard Sync)
 
-    private func updateNowPlaying(with word: VocabWord, status: String) {
+    public func updateNowPlaying(with word: VocabWord, status: String) {
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: word.word.uppercased(),
             MPMediaItemPropertyArtist: "\(word.partOfSpeech) • \(word.phonetic)",
             MPMediaItemPropertyAlbumTitle: "Hands-Free Vocab [\(status)]",
-            MPNowPlayingInfoPropertyPlaybackRate: 1.0
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
+            MPMediaItemPropertyPlaybackDuration: player?.duration ?? 30.0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: player?.currentTime ?? 0.0
         ]
 
-        if let img = renderVocabArtwork(for: word) {
+        if let img = UIImage(named: "AppIcon") {
             let artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
             info[MPMediaItemPropertyArtwork] = artwork
         }
 
-        nowPlayingSession.nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
-    private func renderVocabArtwork(for word: VocabWord) -> UIImage? {
-        let size = CGSize(width: 512, height: 512)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { ctx in
-            // Background
-            UIColor(red: 0.08, green: 0.09, blue: 0.12, alpha: 1.0).setFill()
-            ctx.fill(CGRect(origin: .zero, size: size))
-
-            // Gold accent band
-            UIColor(red: 0.95, green: 0.72, blue: 0.25, alpha: 1.0).setFill()
-            ctx.fill(CGRect(x: 32, y: 32, width: 8, height: 80))
-
-            // Tier text
-            let tierAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 22, weight: .bold),
-                .foregroundColor: UIColor(red: 0.95, green: 0.72, blue: 0.25, alpha: 1.0)
-            ]
-            (word.tier.rawValue.uppercased() as NSString).draw(at: CGPoint(x: 52, y: 36), withAttributes: tierAttrs)
-
-            // Voice instruction banner
-            let voiceAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 20, weight: .medium),
-                .foregroundColor: UIColor.lightGray
-            ]
-            ("🎙️ Speak: 'Next' • 'Repeat' • 'Mastered'" as NSString).draw(at: CGPoint(x: 52, y: 72), withAttributes: voiceAttrs)
-
-            // Word text
-            let wordAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 44, weight: .heavy),
-                .foregroundColor: UIColor.white
-            ]
-            (word.word as NSString).draw(at: CGPoint(x: 32, y: 160), withAttributes: wordAttrs)
-
-            // Definition snippet
-            let defAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 24, weight: .regular),
-                .foregroundColor: UIColor(white: 0.85, alpha: 1.0)
-            ]
-            let rect = CGRect(x: 32, y: 240, width: 448, height: 220)
-            (word.shortDefinition as NSString).draw(in: rect, withAttributes: defAttrs)
-        }
+    private func republishNowPlayingRate() {
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player?.currentTime ?? 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }

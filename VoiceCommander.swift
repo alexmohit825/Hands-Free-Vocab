@@ -3,7 +3,6 @@
 //  Hands-Free Vocab
 //
 //  Hands-Free Continuous Automotive Speech Recognition & Command Engine.
-//  Zero steering wheel buttons, zero screen touches.
 //
 
 import Foundation
@@ -12,14 +11,14 @@ import AVFoundation
 import Combine
 
 public enum VocabCommand: String {
-    case next = "NEXT"           // "Next", "Skip", "Forward", "Got it"
-    case repeatWord = "REPEAT"   // "Repeat", "Again", "Say that again", "One more time"
-    case explain = "EXPLAIN"     // "Explain", "Detail", "More", "Elaborate"
-    case example = "EXAMPLE"     // "Example", "Sentence", "Context"
-    case root = "ROOT"           // "Root", "Origin", "Etymology"
-    case pause = "PAUSE"         // "Pause", "Wait", "Hold on", "Stop"
-    case resume = "RESUME"       // "Resume", "Play", "Continue", "Go"
-    case mastered = "MASTERED"   // "Mastered", "Know it", "Easy", "Done"
+    case next = "NEXT"
+    case repeatWord = "REPEAT"
+    case explain = "EXPLAIN"
+    case example = "EXAMPLE"
+    case root = "ROOT"
+    case pause = "PAUSE"
+    case resume = "RESUME"
+    case mastered = "MASTERED"
 }
 
 public protocol VoiceCommandDelegate: AnyObject {
@@ -32,7 +31,7 @@ public final class VoiceCommander: NSObject, ObservableObject {
     @Published public var isListening: Bool = false
     @Published public var recognizedTranscription: String = ""
     @Published public var lastDetectedCommand: VocabCommand? = nil
-    @Published public var authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
+    @Published public var hasPermission: Bool = false
 
     public weak var delegate: VoiceCommandDelegate?
 
@@ -41,42 +40,58 @@ public final class VoiceCommander: NSObject, ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
 
-    // Command debouncing to avoid double execution on multi-word recognition
     private var lastCommandTimestamp: Date = .distantPast
-    private let debounceInterval: TimeInterval = 1.2
+    private let debounceInterval: TimeInterval = 1.0
 
     private override init() {
         super.init()
-        checkAuthorization()
     }
 
-    public func checkAuthorization() {
-        SFSpeechRecognizer.requestAuthorization { [weak self] status in
+    public func requestPermissionsAndStart(completion: @escaping (Bool) -> Void) {
+        SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
             DispatchQueue.main.async {
-                self?.authorizationStatus = status
-                print("[VoiceCommander] Speech authorization status: \(status.rawValue)")
+                guard authStatus == .authorized else {
+                    print("[VoiceCommander] Speech permission denied: \(authStatus.rawValue)")
+                    self?.hasPermission = false
+                    completion(false)
+                    return
+                }
+
+                if #available(iOS 17.0, *) {
+                    AVAudioApplication.requestRecordPermission { granted in
+                        DispatchQueue.main.async {
+                            self?.hasPermission = granted
+                            if granted {
+                                self?.startContinuousListening()
+                            }
+                            completion(granted)
+                        }
+                    }
+                } else {
+                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                        DispatchQueue.main.async {
+                            self?.hasPermission = granted
+                            if granted {
+                                self?.startContinuousListening()
+                            }
+                            completion(granted)
+                        }
+                    }
+                }
             }
         }
     }
 
     public func startContinuousListening() {
         guard !isListening else { return }
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
-            print("[VoiceCommander] Speech recognition not authorized.")
-            return
-        }
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
 
         stopListening()
 
         do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .duckOthers])
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-
             recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
             guard let recognitionRequest = recognitionRequest else { return }
             recognitionRequest.shouldReportPartialResults = true
-            recognitionRequest.requiresOnDeviceRecognition = true // Zero latency, 100% offline in moving car
 
             let inputNode = audioEngine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
@@ -90,7 +105,7 @@ public final class VoiceCommander: NSObject, ObservableObject {
             try audioEngine.start()
 
             isListening = true
-            print("[VoiceCommander] Started continuous on-device speech recognition.")
+            print("[VoiceCommander] 🎙️ Speech recognition active and listening.")
 
             recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
                 guard let self = self else { return }
@@ -108,7 +123,7 @@ public final class VoiceCommander: NSObject, ObservableObject {
                 }
             }
         } catch {
-            print("[VoiceCommander] Error starting listening: \(error.localizedDescription)")
+            print("[VoiceCommander] Error starting listening: \(error)")
             isListening = false
         }
     }
@@ -132,40 +147,37 @@ public final class VoiceCommander: NSObject, ObservableObject {
         }
     }
 
-    /// Match driver's voice against intuitive lexical study intents
     private func evaluateSpokenUtterance(_ utterance: String) {
         let now = Date()
         guard now.timeIntervalSince(lastCommandTimestamp) > debounceInterval else { return }
 
         let normalized = utterance.lowercased()
-
         var detected: VocabCommand? = nil
 
-        if normalized.contains("next") || normalized.contains("skip") || normalized.contains("forward") || normalized.contains("advance") {
+        if normalized.contains("next") || normalized.contains("skip") || normalized.contains("forward") {
             detected = .next
-        } else if normalized.contains("repeat") || normalized.contains("again") || normalized.contains("say again") || normalized.contains("one more") {
+        } else if normalized.contains("repeat") || normalized.contains("again") || normalized.contains("say again") {
             detected = .repeatWord
-        } else if normalized.contains("master") || normalized.contains("got it") || normalized.contains("i know this") || normalized.contains("easy") {
+        } else if normalized.contains("master") || normalized.contains("got it") || normalized.contains("i know this") {
             detected = .mastered
-        } else if normalized.contains("explain") || normalized.contains("detail") || normalized.contains("elaborate") || normalized.contains("definition") {
+        } else if normalized.contains("explain") || normalized.contains("detail") || normalized.contains("elaborate") {
             detected = .explain
-        } else if normalized.contains("example") || normalized.contains("sentence") || normalized.contains("context") {
+        } else if normalized.contains("example") || normalized.contains("sentence") {
             detected = .example
-        } else if normalized.contains("root") || normalized.contains("origin") || normalized.contains("etymology") {
+        } else if normalized.contains("root") || normalized.contains("origin") {
             detected = .root
-        } else if normalized.contains("pause") || normalized.contains("hold on") || normalized.contains("wait") || normalized.contains("stop") {
+        } else if normalized.contains("pause") || normalized.contains("stop") {
             detected = .pause
-        } else if normalized.contains("resume") || normalized.contains("play") || normalized.contains("continue") || normalized.contains("go") {
+        } else if normalized.contains("resume") || normalized.contains("play") || normalized.contains("continue") {
             detected = .resume
         }
 
         if let command = detected {
             lastCommandTimestamp = now
             lastDetectedCommand = command
-            print("[VoiceCommander] 🎙️ DETECTED VOICE COMMAND: \(command.rawValue)")
+            print("[VoiceCommander] Detected command: \(command.rawValue)")
             delegate?.didRecognizeCommand(command)
 
-            // Clear partial buffer so previous word doesn't re-trigger immediately
             recognitionRequest?.endAudio()
             restartListening()
         }

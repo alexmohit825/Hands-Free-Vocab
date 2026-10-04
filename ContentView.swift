@@ -3,16 +3,17 @@
 //  Hands-Free Vocab
 //
 //  iPhone Companion Studio & In-Car Mirroring Dashboard.
-//  Enables testing voice commands, reviewing lexical roots, and monitoring active SRS retention.
 //
 
 import SwiftUI
+import Speech
+import AVFoundation
 
 public struct ContentView: View {
     @ObservedObject var voiceManager = VoiceManager.shared
     @ObservedObject var voiceCommander = VoiceCommander.shared
-    @State private var selectedTier: VocabTier? = nil
     @State private var showingVoiceCommandCheatSheet: Bool = false
+    @State private var hasRequestedPermissions: Bool = false
 
     public init() {}
 
@@ -60,6 +61,15 @@ public struct ContentView: View {
             .sheet(isPresented: $showingVoiceCommandCheatSheet) {
                 voiceCommandSheet
             }
+            .onAppear {
+                // Warm up audio session and pre-request speech permissions
+                if !hasRequestedPermissions {
+                    hasRequestedPermissions = true
+                    voiceCommander.requestPermissionsAndStart { granted in
+                        print("[ContentView] Microphone & Speech permissions: \(granted)")
+                    }
+                }
+            }
         }
     }
 
@@ -72,7 +82,7 @@ public struct ContentView: View {
                 .foregroundColor(.orange)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("CarPlay Audio Engine Active")
+                Text("CarPlay Audio Engine Ready")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
                 Text("100% Hands-Free • Voice-Controlled")
@@ -93,6 +103,41 @@ public struct ContentView: View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    private var startSessionPromptCard: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 52))
+                .foregroundColor(.orange)
+
+            Text("Begin Today's Commute Deck")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.white)
+
+            Text("Tap to start listening, or connect to your car's CarPlay screen. Control everything hands-free with your voice.")
+                .font(.system(size: 14))
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+
+            Button {
+                voiceCommander.requestPermissionsAndStart { _ in
+                    voiceManager.startDeck(CurriculumData.words, startingAt: 0)
+                }
+            } label: {
+                Text("Start Hands-Free Drive")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
+                    .background(Color.orange)
+                    .cornerRadius(12)
+            }
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity)
+        .background(Color(white: 0.12))
+        .cornerRadius(20)
     }
 
     private func activeWordCard(_ word: VocabWord) -> some View {
@@ -172,39 +217,6 @@ public struct ContentView: View {
         )
     }
 
-    private var startSessionPromptCard: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "play.circle.fill")
-                .font(.system(size: 52))
-                .foregroundColor(.orange)
-
-            Text("Begin Today's Commute Deck")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-
-            Text("Tap to start listening, or connect to your car's CarPlay screen. Control everything hands-free with your voice.")
-                .font(.system(size: 14))
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-
-            Button {
-                voiceManager.startDeck(CurriculumData.words, startingAt: 0)
-            } label: {
-                Text("Start Hands-Free Drive")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 14)
-                    .background(Color.orange)
-                    .cornerRadius(12)
-            }
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity)
-        .background(Color(white: 0.12))
-        .cornerRadius(20)
-    }
-
     private var voiceRecognitionStatusCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -229,7 +241,7 @@ public struct ContentView: View {
             }
 
             if voiceCommander.recognizedTranscription.isEmpty {
-                Text("Listening in vehicle for \"Next\", \"Repeat\", \"Mastered\", \"Explain\"...")
+                Text(voiceCommander.isListening ? "Listening in vehicle for \"Next\", \"Repeat\", \"Mastered\"..." : "Microphone initializing...")
                     .font(.system(size: 13))
                     .foregroundColor(.gray)
                     .italic()
@@ -239,7 +251,7 @@ public struct ContentView: View {
                     .foregroundColor(.white)
             }
 
-            // Quick Voice Action Triggers (for testing without vehicle noise)
+            // Quick Voice Action Triggers
             HStack(spacing: 8) {
                 voiceTestPill("Next", cmd: .next)
                 voiceTestPill("Repeat", cmd: .repeatWord)
@@ -276,7 +288,9 @@ public struct ContentView: View {
             ForEach(VocabTier.allCases) { tier in
                 Button {
                     let words = CurriculumData.words.filter { $0.tier == tier }
-                    voiceManager.startDeck(words, startingAt: 0)
+                    voiceCommander.requestPermissionsAndStart { _ in
+                        voiceManager.startDeck(words, startingAt: 0)
+                    }
                 } label: {
                     HStack(spacing: 16) {
                         Image(systemName: tier.iconName)

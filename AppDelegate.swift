@@ -1,35 +1,12 @@
 //
 //  AppDelegate.swift
-//  VocabRoady
+//  Hands-Free Vocab
 //
-//  Application entry point and lifecycle delegate.
+//  Application delegate — used only to route the CarPlay scene role.
+//  Matches Hands-Free Lingo proven pattern.
 //
 
 import UIKit
+import CarPlay
 
-@main
-public final class AppDelegate: UIResponder, UIApplicationDelegate {
-    public func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        print("[VocabRoady] Launched. Preparing speech and audio cache engines.")
-        _ = AudioCache.shared
-        _ = VoiceCommander.shared
-        _ = VoiceManager.shared
-        return true
-    }
-
-    // MARK: - UISceneSession Lifecycle
-
-    public func application(
-        _ application: UIApplication,
-        configurationForConnecting connectingSceneSession: UISceneSession,
-        options: UIScene.ConnectionOptions
-    ) -> UISceneConfiguration {
-        if connectingSceneSession.role == .carTemplateApplication {
-            return UISceneConfiguration(name: "CarPlay Configuration", sessionRole: connectingSceneSession.role)
-        }
-        return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
-    }
-}
+public final class AppDelegate: NSObject, UIApplicationDelegate { }

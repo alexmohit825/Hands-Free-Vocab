@@ -3,7 +3,7 @@
 //  Hands-Free Vocab
 //
 //  Apple CarPlay Automotive Template Interface.
-//  Zero visual distraction; audio-first with CPVoiceControlTemplate integration.
+//  Matching Hands-Free Lingo proven architecture: CPTabBarTemplate -> CPListTemplate -> CPNowPlayingTemplate.
 //
 
 import CarPlay
@@ -21,11 +21,8 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
         print("[CarPlay] Connected interface controller to vehicle.")
         self.interfaceController = interfaceController
 
-        let rootTemplate = buildTabBarTemplate()
-        interfaceController.setRootTemplate(rootTemplate, animated: false, completion: nil)
-
-        // Automatically activate hands-free continuous voice recognition when car connects
-        VoiceCommander.shared.startContinuousListening()
+        let tabTemplate = buildTabBarTemplate()
+        interfaceController.setRootTemplate(tabTemplate, animated: false, completion: nil)
     }
 
     public func templateApplicationScene(
@@ -37,33 +34,12 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
         VoiceCommander.shared.stopListening()
     }
 
-    // MARK: - Voice Control Template Modal
-
-    public func presentVoiceConversationOverlay() {
-        guard let controller = interfaceController else { return }
-
-        let state = CPVoiceControlState(
-            identifier: "Hands-Free VocabListening",
-            titleVariants: [
-                "Hands-Free Vocab Voice Active",
-                "Say: 'Next', 'Repeat', 'Mastered'",
-                "Say: 'Explain', 'Example', 'Root'"
-            ],
-            image: nil,
-            repeats: true
-        )
-
-        let voiceTemplate = CPVoiceControlTemplate(voiceControlStates: [state])
-        voiceTemplate.activateVoiceControlState(withIdentifier: "Hands-Free VocabListening")
-        controller.presentTemplate(voiceTemplate, animated: true, completion: nil)
-    }
-
     // MARK: - Template Architecture
 
     private func buildTabBarTemplate() -> CPTabBarTemplate {
         var templates: [CPTemplate] = []
 
-        // Tab 1: Commute Daily Mix (All Tiers)
+        // Tab 1: Commute Daily Sprint
         templates.append(buildCommuteSprintTemplate())
 
         // Tab 2..N: Curated Tiers
@@ -71,39 +47,27 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
             templates.append(buildTierListTemplate(for: tier))
         }
 
-        return CPTabBarTemplate(templates: templates)
+        let tabBar = CPTabBarTemplate(templates: templates)
+        return tabBar
     }
 
     private func buildCommuteSprintTemplate() -> CPListTemplate {
-        // Voice conversation trigger item
-        let voiceItem = CPListItem(
-            text: "🎙️ Start Voice Conversation",
-            detailText: "Hands-free continuous driving vocabulary tutor"
-        )
-        voiceItem.handler = { [weak self] _, completion in
-            VoiceManager.shared.startDeck(CurriculumData.words, startingAt: 0)
-            self?.presentVoiceConversationOverlay()
-            completion()
-        }
-
-        let items: [CPListItem] = CurriculumData.words.prefix(10).enumerated().map { index, word in
+        let items: [CPListItem] = CurriculumData.words.prefix(12).enumerated().map { index, word in
             let item = CPListItem(
                 text: word.word,
                 detailText: "\(word.partOfSpeech) • \(word.shortDefinition)"
             )
             item.handler = { [weak self] _, completion in
-                VoiceManager.shared.startDeck(CurriculumData.words, startingAt: index)
-                self?.presentVoiceConversationOverlay()
+                self?.startDriveSession(deck: CurriculumData.words, index: index)
                 completion()
             }
             return item
         }
 
-        let mainSection = CPListSection(items: [voiceItem], header: "Voice Command Mode", sectionIndexTitle: nil)
-        let wordSection = CPListSection(items: items, header: "Today's High-Yield Words", sectionIndexTitle: nil)
-        let list = CPListTemplate(title: "Commute Sprint", sections: [mainSection, wordSection])
+        let mainSection = CPListSection(items: items, header: "DAILY SPRINT • 100% HANDS-FREE", sectionIndexTitle: nil)
+        let list = CPListTemplate(title: "Daily Drive", sections: [mainSection])
         list.tabTitle = "Daily Drive"
-        list.tabSystemItem = .mostRecent
+        list.tabImage = UIImage(systemName: "car.fill")
         return list
     }
 
@@ -115,17 +79,24 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
                 detailText: word.shortDefinition
             )
             item.handler = { [weak self] _, completion in
-                VoiceManager.shared.startDeck(wordsForTier, startingAt: index)
-                self?.presentVoiceConversationOverlay()
+                self?.startDriveSession(deck: wordsForTier, index: index)
                 completion()
             }
             return item
         }
 
-        let section = CPListSection(items: items, header: tier.subtitle, sectionIndexTitle: nil)
+        let section = CPListSection(items: items, header: tier.subtitle.uppercased(), sectionIndexTitle: nil)
         let list = CPListTemplate(title: tier.rawValue, sections: [section])
-        list.tabTitle = tier.rawValue.components(separatedBy: " ").first ?? "Deck"
-        list.tabSystemItem = .bookmarks
+        list.tabTitle = tier.rawValue.components(separatedBy: " ").first ?? "Track"
+        list.tabImage = UIImage(systemName: tier.iconName)
         return list
+    }
+
+    private func startDriveSession(deck: [VocabWord], index: Int) {
+        VoiceManager.shared.startDeck(deck, startingAt: index)
+
+        // Push Now Playing Template so the vehicle head unit shows the word, track info, and playback progress
+        let nowPlaying = CPNowPlayingTemplate.shared
+        interfaceController?.pushTemplate(nowPlaying, animated: true, completion: nil)
     }
 }

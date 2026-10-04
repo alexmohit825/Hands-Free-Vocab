@@ -1,151 +1,242 @@
 //
 //  AudioCache.swift
-//  VocabRoady
+//  Hands-Free Vocab
 //
-//  Pre-renders AVSpeechSynthesizer utterances to local .caf files in Documents/AudioCache/
-//  and plays back via AVAudioPlayer. This avoids mid-utterance CarPlay route dropouts.
+//  Pre-renders AVSpeechSynthesizer output to .caf files in the app's
+//  Documents directory, then plays them back via AVAudioPlayer.
+//  Matching Hands-Free Lingo proven architecture.
 //
 
 import Foundation
 import AVFoundation
 import CryptoKit
 
-public struct AudioRenderRequest {
+public struct RenderRequest {
     public let text: String
-    public let voiceIdentifier: String
+    public let localeCode: String
+    public let voiceID: String
     public let rate: Float
     public let pitch: Float
     public let volume: Float
+    public let postGain: Float
 
     public init(
         text: String,
-        voiceIdentifier: String = "com.apple.ttsbundle.siri_female_en-US_compact",
-        rate: Float = AVSpeechUtteranceDefaultSpeechRate * 0.92,
+        localeCode: String = "en-US",
+        voiceID: String = "",
+        rate: Float = AVSpeechUtteranceDefaultSpeechRate * 0.95,
         pitch: Float = 1.0,
-        volume: Float = 1.0
+        volume: Float = 1.0,
+        postGain: Float = 1.0
     ) {
         self.text = text
-        self.voiceIdentifier = voiceIdentifier
+        self.localeCode = localeCode
+        self.voiceID = voiceID
         self.rate = rate
         self.pitch = pitch
         self.volume = volume
+        self.postGain = postGain
     }
+}
+
+public enum AudioCacheError: Error {
+    case voiceUnavailable
+    case renderFailed(String)
+    case writeFailed(String)
 }
 
 public final class AudioCache: @unchecked Sendable {
     public static let shared = AudioCache()
 
-    private let renderQueue = DispatchQueue(label: "com.Alex.VocabRoady.AudioCache.render", qos: .userInitiated)
+    private let renderQueue = DispatchQueue(label: "com.Alex.HandsFreeVocab.AudioCache.render",
+                                            qos: .userInitiated)
+
     private var inFlight: [String: [((Result<URL, Error>) -> Void)]] = [:]
-    private let lock = NSLock()
+    private let inFlightLock = NSLock()
 
     private init() {
-        _ = try? Self.ensureCacheDirectory()
+        _ = try? Self.ensureCacheRoot()
     }
 
-    private static func cacheRoot() throws -> URL {
-        let docs = try FileManager.default.url(
-            for: .documentDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        return docs.appendingPathComponent("AudioCache", isDirectory: true)
-    }
+    // MARK: - Public API
 
-    private static func ensureCacheDirectory() throws -> URL {
-        let dir = try cacheRoot()
-        if !FileManager.default.fileExists(atPath: dir.path) {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
-        return dir
-    }
-
-    public static func cacheURL(for req: AudioRenderRequest) throws -> URL {
-        let dir = try ensureCacheDirectory()
-        let rawKey = "\(req.text)|\(req.voiceIdentifier)|\(req.rate)|\(req.pitch)|\(req.volume)"
-        let digest = Insecure.SHA1.hash(data: Data(rawKey.utf8))
-        let hex = digest.map { String(format: "%02x", $0) }.joined()
-        return dir.appendingPathComponent("\(hex).caf")
-    }
-
-    public func getAudioURL(for req: AudioRenderRequest, completion: @escaping (Result<URL, Error>) -> Void) {
-        let fileURL: URL
+    public func url(for req: RenderRequest,
+                    completion: @escaping (Result<URL, Error>) -> Void) {
+        let path: URL
         do {
-            fileURL = try Self.cacheURL(for: req)
+            path = try Self.cacheURL(for: req)
         } catch {
             DispatchQueue.main.async { completion(.failure(error)) }
             return
         }
 
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            DispatchQueue.main.async { completion(.success(fileURL)) }
+        if FileManager.default.fileExists(atPath: path.path) {
+            DispatchQueue.main.async { completion(.success(path)) }
             return
         }
 
-        let key = fileURL.path
-        lock.lock()
-        if inFlight[key] != nil {
-            inFlight[key]?.append(completion)
-            lock.unlock()
+        let key = path.path
+        inFlightLock.lock()
+        if var waiters = inFlight[key] {
+            waiters.append(completion)
+            inFlight[key] = waiters
+            inFlightLock.unlock()
             return
+        } else {
+            inFlight[key] = [completion]
         }
-        inFlight[key] = [completion]
-        lock.unlock()
+        inFlightLock.unlock()
 
         renderQueue.async { [weak self] in
             guard let self = self else { return }
-            self.renderUtteranceToFile(req: req, targetURL: fileURL) { result in
-                self.lock.lock()
-                let callbacks = self.inFlight.removeValue(forKey: key) ?? []
-                self.lock.unlock()
+            let result: Result<URL, Error>
+            do {
+                try self.renderToFile(req: req, dest: path)
+                result = .success(path)
+            } catch {
+                result = .failure(error)
+            }
 
-                DispatchQueue.main.async {
-                    for cb in callbacks {
-                        cb(result)
-                    }
-                }
+            self.inFlightLock.lock()
+            let waiters = self.inFlight[key] ?? []
+            self.inFlight[key] = nil
+            self.inFlightLock.unlock()
+
+            DispatchQueue.main.async {
+                for cb in waiters { cb(result) }
             }
         }
     }
 
-    private func renderUtteranceToFile(req: AudioRenderRequest, targetURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
-        let synthesizer = AVSpeechSynthesizer()
-        let utterance = AVSpeechUtterance(string: req.text)
+    // MARK: - Core Render Implementation
 
-        if let voice = AVSpeechSynthesisVoice(identifier: req.voiceIdentifier) ?? AVSpeechSynthesisVoice(language: "en-US") {
-            utterance.voice = voice
+    private func renderToFile(req: RenderRequest, dest: URL) throws {
+        let voice: AVSpeechSynthesisVoice
+        if !req.voiceID.isEmpty, let matched = AVSpeechSynthesisVoice(identifier: req.voiceID) {
+            voice = matched
+        } else if let localeVoice = AVSpeechSynthesisVoice(language: req.localeCode) {
+            voice = localeVoice
+        } else if let fallback = AVSpeechSynthesisVoice(language: "en-US") {
+            voice = fallback
+        } else {
+            throw AudioCacheError.voiceUnavailable
         }
+
+        let utterance = AVSpeechUtterance(string: req.text)
+        utterance.voice = voice
         utterance.rate = req.rate
         utterance.pitchMultiplier = req.pitch
         utterance.volume = req.volume
+        utterance.preUtteranceDelay = 0.0
+        utterance.postUtteranceDelay = 0.0
 
-        var outputAudioFile: AVAudioFile?
-        var renderError: Error?
+        let synth = AVSpeechSynthesizer()
+        var audioFile: AVAudioFile?
+        var writeError: Error?
 
-        synthesizer.write(utterance) { buffer in
-            guard let pcmBuffer = buffer as? AVAudioPCMBuffer else { return }
-            if pcmBuffer.frameLength == 0 { return }
+        let tmp = dest.deletingLastPathComponent()
+            .appendingPathComponent(UUID().uuidString + ".tmp.caf")
+
+        // Semaphore waits for buffer drainage until EOF empty buffer
+        let sem = DispatchSemaphore(value: 0)
+        var didFinish = false
+
+        synth.write(utterance) { (buffer: AVAudioBuffer) in
+            guard let pcm = buffer as? AVAudioPCMBuffer else {
+                writeError = AudioCacheError.renderFailed("non-PCM buffer")
+                if !didFinish { didFinish = true; sem.signal() }
+                return
+            }
+
+            if pcm.frameLength == 0 {
+                // EOF marker from AVSpeechSynthesizer
+                if !didFinish { didFinish = true; sem.signal() }
+                return
+            }
 
             do {
-                if outputAudioFile == nil {
-                    outputAudioFile = try AVAudioFile(
-                        forWriting: targetURL,
-                        settings: pcmBuffer.format.settings,
-                        commonFormat: pcmBuffer.format.commonFormat,
-                        interleaved: pcmBuffer.format.isInterleaved
-                    )
+                if audioFile == nil {
+                    audioFile = try AVAudioFile(forWriting: tmp,
+                                                settings: pcm.format.settings,
+                                                commonFormat: .pcmFormatFloat32,
+                                                interleaved: false)
                 }
-                try outputAudioFile?.write(from: pcmBuffer)
+
+                if req.postGain != 1.0,
+                   let channelData = pcm.floatChannelData {
+                    let frames = Int(pcm.frameLength)
+                    let channels = Int(pcm.format.channelCount)
+                    let gain = req.postGain
+                    for ch in 0..<channels {
+                        let ptr = channelData[ch]
+                        for i in 0..<frames {
+                            var v = ptr[i] * gain
+                            if v > 1.0 { v = 1.0 } else if v < -1.0 { v = -1.0 }
+                            ptr[i] = v
+                        }
+                    }
+                }
+                try audioFile?.write(from: pcm)
             } catch {
-                renderError = error
+                writeError = error
+                if !didFinish { didFinish = true; sem.signal() }
             }
         }
 
-        if let error = renderError {
-            completion(.failure(error))
-        } else {
-            completion(.success(targetURL))
+        let waited = sem.wait(timeout: .now() + 30)
+        if waited == .timedOut {
+            throw AudioCacheError.renderFailed("render timeout after 30s")
         }
+        if let e = writeError { throw e }
+        guard audioFile != nil else {
+            throw AudioCacheError.renderFailed("no audio produced")
+        }
+
+        audioFile = nil
+
+        try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: dest.path) {
+            try? FileManager.default.removeItem(at: dest)
+        }
+        try FileManager.default.moveItem(at: tmp, to: dest)
+    }
+
+    // MARK: - Paths & Hashing
+
+    private static func ensureCacheRoot() throws -> URL {
+        let docs = try FileManager.default.url(for: .documentDirectory,
+                                               in: .userDomainMask,
+                                               appropriateFor: nil,
+                                               create: true)
+        let root = docs.appendingPathComponent("AudioCache", isDirectory: true)
+        try FileManager.default.createDirectory(at: root,
+                                                withIntermediateDirectories: true)
+        return root
+    }
+
+    private static func cacheURL(for req: RenderRequest) throws -> URL {
+        let root = try ensureCacheRoot()
+        let langDir = root.appendingPathComponent(req.localeCode, isDirectory: true)
+        try FileManager.default.createDirectory(at: langDir,
+                                                withIntermediateDirectories: true)
+        return langDir.appendingPathComponent(Self.key(for: req) + ".caf")
+    }
+
+    private static func key(for req: RenderRequest) -> String {
+        var hasher = Insecure.SHA1()
+        hasher.update(data: Data(req.text.utf8))
+        hasher.update(data: Data("|".utf8))
+        hasher.update(data: Data(req.voiceID.utf8))
+        hasher.update(data: Data("|".utf8))
+        hasher.update(data: Data(String(format: "%.3f", req.rate).utf8))
+        hasher.update(data: Data("|".utf8))
+        hasher.update(data: Data(String(format: "%.3f", req.pitch).utf8))
+        hasher.update(data: Data("|".utf8))
+        hasher.update(data: Data(String(format: "%.3f", req.volume).utf8))
+        hasher.update(data: Data("|".utf8))
+        hasher.update(data: Data(String(format: "%.3f", req.postGain).utf8))
+        let digest = hasher.finalize()
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
