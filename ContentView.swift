@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  VocabRoady
+//  Hands-Free Vocab
 //
 //  iPhone Companion Studio & In-Car Mirroring Dashboard.
 //  Enables testing voice commands, reviewing lexical roots, and monitoring active SRS retention.
@@ -44,7 +44,7 @@ public struct ContentView: View {
                     .padding(.vertical, 16)
                 }
             }
-            .navigationTitle("VocabRoady")
+            .navigationTitle("Hands-Free Vocab")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -314,7 +314,7 @@ public struct ContentView: View {
                 Color(red: 0.08, green: 0.09, blue: 0.12).ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        Text("Drive safely. VocabRoady requires zero touches or button pressing while you are behind the wheel.")
+                        Text("Drive safely. Hands-Free Vocab requires zero touches or button pressing while you are behind the wheel.")
                             .font(.system(size: 15))
                             .foregroundColor(.gray)
 

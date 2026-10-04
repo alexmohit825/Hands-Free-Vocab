@@ -1,6 +1,6 @@
 //
 //  CarPlaySceneDelegate.swift
-//  VocabRoady
+//  Hands-Free Vocab
 //
 //  Apple CarPlay Automotive Template Interface.
 //  Zero visual distraction; audio-first with CPVoiceControlTemplate integration.
@@ -43,9 +43,9 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
         guard let controller = interfaceController else { return }
 
         let state = CPVoiceControlState(
-            identifier: "VocabRoadyListening",
+            identifier: "Hands-Free VocabListening",
             titleVariants: [
-                "VocabRoady Voice Active",
+                "Hands-Free Vocab Voice Active",
                 "Say: 'Next', 'Repeat', 'Mastered'",
                 "Say: 'Explain', 'Example', 'Root'"
             ],
@@ -54,7 +54,7 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
         )
 
         let voiceTemplate = CPVoiceControlTemplate(voiceControlStates: [state])
-        voiceTemplate.activateVoiceControlState(withIdentifier: "VocabRoadyListening")
+        voiceTemplate.activateVoiceControlState(withIdentifier: "Hands-Free VocabListening")
         controller.presentTemplate(voiceTemplate, animated: true, completion: nil)
     }
 

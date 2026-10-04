@@ -1,4 +1,4 @@
-name: VocabRoady
+name: HandsFreeVocab
 options:
   bundleIdPrefix: com.Alex
   deploymentTarget:
@@ -8,8 +8,8 @@ options:
 
 settings:
   base:
-    PRODUCT_NAME: VocabRoady
-    PRODUCT_BUNDLE_IDENTIFIER: com.Alex.VocabRoady
+    PRODUCT_NAME: HandsFreeVocab
+    PRODUCT_BUNDLE_IDENTIFIER: com.Alex.HandsFreeVocab
     DEVELOPMENT_TEAM: "523MJL63MC"
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.9"
@@ -19,11 +19,11 @@ settings:
     ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
     INFOPLIST_FILE: Info.plist
     GENERATE_INFOPLIST_FILE: NO
-    CODE_SIGN_ENTITLEMENTS: VocabRoady.entitlements
+    CODE_SIGN_ENTITLEMENTS: HandsFreeVocab.entitlements
     ENABLE_USER_SCRIPT_SANDBOXING: NO
 
 targets:
-  VocabRoady:
+  HandsFreeVocab:
     type: application
     platform: iOS
     sources:
@@ -35,6 +35,6 @@ targets:
           - "ExportOptions.plist"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.Alex.VocabRoady
-        PRODUCT_NAME: VocabRoady
+        PRODUCT_BUNDLE_IDENTIFIER: com.Alex.HandsFreeVocab
+        PRODUCT_NAME: HandsFreeVocab
         INFOPLIST_FILE: Info.plist

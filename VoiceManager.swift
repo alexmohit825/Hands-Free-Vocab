@@ -1,6 +1,6 @@
 //
 //  VoiceManager.swift
-//  VocabRoady
+//  Hands-Free Vocab
 //
 //  Automotive Audio Director & Spaced Repetition Playback Orchestrator.
 //
@@ -261,7 +261,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: word.word.uppercased(),
             MPMediaItemPropertyArtist: "\(word.partOfSpeech) • \(word.phonetic)",
-            MPMediaItemPropertyAlbumTitle: "VocabRoady [\(status)]",
+            MPMediaItemPropertyAlbumTitle: "Hands-Free Vocab [\(status)]",
             MPNowPlayingInfoPropertyPlaybackRate: 1.0
         ]
 

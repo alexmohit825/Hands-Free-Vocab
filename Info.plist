@@ -11,7 +11,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Hands-Free Vocab</string>
+	<key>CFBundleDisplayName</key>
+	<string>Hands-Free Vocab</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,9 +25,9 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>VocabRoady listens for hands-free voice commands while driving (such as "Next", "Repeat", "Mastered", or "Explain") so you never have to look at or touch a screen.</string>
+	<string>Hands-Free Vocab listens for hands-free voice commands while driving (such as "Next", "Repeat", "Mastered", or "Explain") so you never have to look at or touch a screen.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>VocabRoady uses on-device speech recognition to seamlessly understand your spoken study commands while driving.</string>
+	<string>Hands-Free Vocab uses on-device speech recognition to seamlessly understand your spoken study commands while driving.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
