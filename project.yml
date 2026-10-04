@@ -38,3 +38,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.Alex.HandsFreeVocab
         PRODUCT_NAME: HandsFreeVocab
         INFOPLIST_FILE: Info.plist
+        CODE_SIGN_ENTITLEMENTS: HandsFreeVocab.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
