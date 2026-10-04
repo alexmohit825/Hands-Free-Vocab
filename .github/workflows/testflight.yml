@@ -20,59 +20,55 @@ jobs:
 
       - name: Select Xcode Version
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+          ls -d /Applications/Xcode*.app
+          sudo xcode-select -s /Applications/Xcode_16.0.app || sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate Xcode Project
-        run: xcodegen generate
+      - name: Generate Native Xcode Project with Dynamic Build Number
+        run: |
+          BUILD_NUM=$(( ${{ github.run_number }} + 1 ))
+          echo "Setting CURRENT_PROJECT_VERSION to $BUILD_NUM"
+          sed -i '' "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: \"$BUILD_NUM\"/" project.yml
+          xcodegen generate
 
-      - name: Set Up App Store Connect API Key
+      - name: Configure App Store Connect API Credentials
         env:
-          KEY_ID: "38F6WA87DU"
-          ISSUER_ID: "73c7355a-beef-4d79-919d-c3d7dec7747a"
-          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_38F6WA87DU.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_38F6WA87DU.p8
 
-      - name: Increment Build Number
+      - name: Validate Apple API Key Connection
         run: |
-          BUILD_NUMBER="${{ github.run_number }}"
-          echo "Setting build number to $BUILD_NUMBER"
-          xcrun agvtool new-version -all "$BUILD_NUMBER" || true
+          xcrun altool --list-apps \
+            --apiKey 38F6WA87DU \
+            --apiIssuer 73c7355a-beef-4d79-919d-c3d7dec7747a
 
-      - name: Archive App
+      - name: Archive Release Candidate for App Store
         run: |
+          mkdir -p build/archive
           xcodebuild archive \
             -project VocabRoady.xcodeproj \
             -scheme VocabRoady \
+            -destination 'generic/platform=iOS' \
             -configuration Release \
-            -archivePath build/VocabRoady.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_38F6WA87DU.p8 \
-            -authenticationKeyID 38F6WA87DU \
-            -authenticationKeyIssuerID 73c7355a-beef-4d79-919d-c3d7dec7747a
+            -archivePath build/archive/VocabRoady.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
 
-      - name: Export IPA
+      - name: Export & Deliver to App Store Connect via Apple Direct Upload
         run: |
+          mkdir -p build/output
           xcodebuild -exportArchive \
-            -archivePath build/VocabRoady.xcarchive \
-            -exportPath build/export \
+            -archivePath build/archive/VocabRoady.xcarchive \
             -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/output \
             -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_38F6WA87DU.p8 \
             -authenticationKeyID 38F6WA87DU \
-            -authenticationKeyIssuerID 73c7355a-beef-4d79-919d-c3d7dec7747a
-
-      - name: Upload to TestFlight
-        run: |
-          IPA_PATH=$(find build/export -name "*.ipa" | head -n 1)
-          echo "Delivering IPA to TestFlight: $IPA_PATH"
-          xcrun altool --upload-app \
-            --type ios \
-            --file "$IPA_PATH" \
-            --apiKey 38F6WA87DU \
-            --apiIssuer 73c7355a-beef-4d79-919d-c3d7dec7747a
+            -authenticationKeyIssuerID 73c7355a-beef-4d79-919d-c3d7dec7747a \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_38F6WA87DU.p8
+          echo "✓ Native xcodebuild direct upload to TestFlight completed!"
