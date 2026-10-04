@@ -86,6 +86,9 @@ public final class VoiceCommander: NSObject, ObservableObject {
         guard !isListening else { return }
         guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
 
+        // Make sure audio session is configured before accessing inputNode
+        VoiceManager.shared.configureAudioSessionIfNeeded()
+
         stopListening()
 
         do {
@@ -95,8 +98,12 @@ public final class VoiceCommander: NSObject, ObservableObject {
 
             let inputNode = audioEngine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
-            inputNode.removeTap(onBus: 0)
+            guard recordingFormat.sampleRate > 0 && recordingFormat.channelCount > 0 else {
+                print("[VoiceCommander] Invalid recording format: \(recordingFormat)")
+                return
+            }
 
+            inputNode.removeTap(onBus: 0)
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
                 self?.recognitionRequest?.append(buffer)
             }
@@ -131,8 +138,8 @@ public final class VoiceCommander: NSObject, ObservableObject {
     public func stopListening() {
         if audioEngine.isRunning {
             audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
         }
+        audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionRequest = nil
         recognitionTask?.cancel()
@@ -142,7 +149,10 @@ public final class VoiceCommander: NSObject, ObservableObject {
 
     private func restartListening() {
         stopListening()
+        // Only restart if VoiceManager is not currently speaking
+        guard !VoiceManager.shared.isPlaying else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard !(VoiceManager.shared.isPlaying) else { return }
             self?.startContinuousListening()
         }
     }

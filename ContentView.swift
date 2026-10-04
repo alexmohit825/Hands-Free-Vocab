@@ -195,18 +195,25 @@ public struct ContentView: View {
                     .foregroundColor(.orange)
             }
 
-            // Driver Status Mode Banner
-            HStack {
-                Image(systemName: "speaker.wave.2.fill")
-                    .foregroundColor(.orange)
-                Text(voiceManager.playbackModeDescription)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
-                Spacer()
+            // Driver Status Mode Banner & Manual Audio Tap
+            Button {
+                voiceManager.speakText(word.spokenAcousticHook) {}
+            } label: {
+                HStack {
+                    Image(systemName: voiceManager.isPlaying ? "speaker.wave.3.fill" : "speaker.wave.2.fill")
+                        .foregroundColor(.orange)
+                    Text(voiceManager.playbackModeDescription)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Text("Tap to Speak")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.orange)
+                }
+                .padding(12)
+                .background(Color.black.opacity(0.4))
+                .cornerRadius(10)
             }
-            .padding(12)
-            .background(Color.black.opacity(0.4))
-            .cornerRadius(10)
         }
         .padding(20)
         .background(Color(white: 0.12))

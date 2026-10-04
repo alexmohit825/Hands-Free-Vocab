@@ -12,7 +12,7 @@ import MediaPlayer
 import Combine
 import UIKit
 
-public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObject, VoiceCommandDelegate {
+public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate, ObservableObject, VoiceCommandDelegate {
     public static let shared = VoiceManager()
 
     private var player: AVAudioPlayer?
@@ -37,19 +37,21 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
         observeAppLifecycle()
     }
 
+    private var directSynthesizer: AVSpeechSynthesizer?
+    private var isUsingDirectSpeech: Bool = false
+
     // MARK: - Audio Session Priority
 
     public func configureAudioSessionIfNeeded() {
-        guard !didSetAudioCategory else { return }
-        didSetAudioCategory = true
-
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback,
+            // .playAndRecord allows both microphone input and full-volume speaker output.
+            // .defaultToSpeaker ensures sound routes to the bottom loud speaker / car Bluetooth instead of receiver.
+            try session.setCategory(.playAndRecord,
                                     mode: .spokenAudio,
-                                    options: [.allowBluetoothA2DP, .allowAirPlay])
+                                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowAirPlay])
             try session.setActive(true, options: [])
-            print("[VoiceManager] Audio session active with .playback / .spokenAudio")
+            print("[VoiceManager] Audio session active with .playAndRecord / .spokenAudio")
         } catch {
             print("[VoiceManager] Audio session setCategory error: \(error)")
         }
@@ -81,7 +83,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
     private func observeAppLifecycle() {
         let nc = NotificationCenter.default
         nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-            if self?.player?.isPlaying != true {
+            if self?.player?.isPlaying != true && self?.directSynthesizer?.isSpeaking != true {
                 try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
                 self?.didSetAudioCategory = false
             }
@@ -95,7 +97,6 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
         self.activeDeck = deck
         self.activeIndex = max(0, min(index, deck.count - 1))
         self.presentWord(self.activeDeck[self.activeIndex])
-        VoiceCommander.shared.startContinuousListening()
     }
 
     public func presentWord(_ word: VocabWord) {
@@ -185,6 +186,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
     public func advanceWord(by offset: Int) {
         recallTimer?.invalidate()
         player?.stop()
+        directSynthesizer?.stopSpeaking(at: .immediate)
 
         guard !activeDeck.isEmpty else { return }
         let nextIndex = activeIndex + offset
@@ -212,14 +214,20 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
     public func pauseStudySession() {
         recallTimer?.invalidate()
         player?.pause()
+        directSynthesizer?.pauseSpeaking(at: .immediate)
         isPlaying = false
         playbackModeDescription = "Paused"
         republishNowPlayingRate()
+        VoiceCommander.shared.stopListening()
     }
 
     public func resumeStudySession() {
         if let player = player, !player.isPlaying {
             player.play()
+            isPlaying = true
+            republishNowPlayingRate()
+        } else if let synth = directSynthesizer, synth.isPaused {
+            synth.continueSpeaking()
             isPlaying = true
             republishNowPlayingRate()
         } else if let word = currentWord {
@@ -232,8 +240,18 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
     public func speakText(_ text: String, completion: @escaping () -> Void) {
         configureAudioSessionIfNeeded()
 
+        // Temporarily pause speech recognition while speaking to prevent feedback/audio conflicts
+        VoiceCommander.shared.stopListening()
+
         player?.stop()
         player = nil
+        directSynthesizer?.stopSpeaking(at: .immediate)
+
+        self.completionHandler = { [weak self] in
+            // Re-engage speech recognition once the app finishes speaking
+            VoiceCommander.shared.startContinuousListening()
+            completion()
+        }
 
         let req = RenderRequest(text: text, localeCode: "en-US", rate: 0.50, pitch: 1.0, volume: 1.0, postGain: 1.0)
         AudioCache.shared.url(for: req) { [weak self] result in
@@ -244,22 +262,61 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, ObservableObje
                     self.player = try AVAudioPlayer(contentsOf: url)
                     self.player?.delegate = self
                     self.player?.prepareToPlay()
-                    self.player?.play()
-                    self.isPlaying = true
-                    self.completionHandler = completion
-                    self.republishNowPlayingRate()
+                    let started = self.player?.play() ?? false
+                    if started {
+                        self.isPlaying = true
+                        self.republishNowPlayingRate()
+                    } else {
+                        print("[VoiceManager] AVAudioPlayer.play() returned false, falling back to direct synthesizer")
+                        self.speakDirectly(text: text)
+                    }
                 } catch {
-                    print("[VoiceManager] AVAudioPlayer error: \(error)")
-                    completion()
+                    print("[VoiceManager] AVAudioPlayer error: \(error), falling back to direct synthesizer")
+                    self.speakDirectly(text: text)
                 }
             case .failure(let error):
-                print("[VoiceManager] AudioCache error: \(error)")
-                completion()
+                print("[VoiceManager] AudioCache error: \(error), falling back to direct synthesizer")
+                self.speakDirectly(text: text)
             }
         }
     }
 
+    private func speakDirectly(text: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let synth = AVSpeechSynthesizer()
+            synth.delegate = self
+            self.directSynthesizer = synth
+
+            let utterance = AVSpeechUtterance(string: text)
+            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
+            utterance.pitchMultiplier = 1.0
+            utterance.volume = 1.0
+
+            self.isPlaying = true
+            self.republishNowPlayingRate()
+            synth.speak(utterance)
+        }
+    }
+
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        self.isPlaying = false
+        republishNowPlayingRate()
+        let handler = completionHandler
+        completionHandler = nil
+        handler?()
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        self.isPlaying = false
+        republishNowPlayingRate()
+        let handler = completionHandler
+        completionHandler = nil
+        handler?()
+    }
+
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         self.isPlaying = false
         republishNowPlayingRate()
         let handler = completionHandler
