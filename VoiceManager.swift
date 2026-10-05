@@ -191,13 +191,49 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         guard !activeDeck.isEmpty else { return }
         let nextIndex = activeIndex + offset
         if nextIndex >= 0 && nextIndex < activeDeck.count {
-            activeIndex = nextIndex
-            presentWord(activeDeck[activeIndex])
+            let previousSet = activeDeck[activeIndex].setNumber
+            let nextSet = activeDeck[nextIndex].setNumber
+
+            if previousSet != nextSet {
+                // Moving into a new set in the active deck
+                activeIndex = nextIndex
+                announceSetTransition(completedSet: previousSet, nextSet: nextSet)
+            } else {
+                activeIndex = nextIndex
+                presentWord(activeDeck[activeIndex])
+            }
         } else if nextIndex >= activeDeck.count {
-            speakText("Daily vocabulary sprint complete. Excellent focus.") { [weak self] in
-                self?.activeIndex = 0
-                if let first = self?.activeDeck.first {
-                    self?.presentWord(first)
+            // Reached the end of the current active deck!
+            // Check if user is studying a single set, a tier, or the master deck
+            let currentSet = activeDeck[activeIndex].setNumber
+            let totalSets = CurriculumData.totalSetsCount
+            let nextSet = (currentSet >= totalSets) ? 1 : currentSet + 1
+
+            announceSetTransition(completedSet: currentSet, nextSet: nextSet, isFullDeckProgression: true)
+        }
+    }
+
+    private func announceSetTransition(completedSet: Int, nextSet: Int, isFullDeckProgression: Bool = false) {
+        let announcement = "Set \(completedSet) complete. Moving to Set \(nextSet)."
+        self.playbackModeDescription = "Transitioning to Set \(nextSet)..."
+
+        speakText(announcement) { [weak self] in
+            guard let self = self else { return }
+            // 2-second pause requested by user before starting next set
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                guard let self = self else { return }
+                if isFullDeckProgression {
+                    let nextSetWords = CurriculumData.wordsForSet(nextSet)
+                    if !nextSetWords.isEmpty {
+                        self.startDeck(nextSetWords, startingAt: 0)
+                        return
+                    } else if !CurriculumData.words.isEmpty {
+                        self.startDeck(CurriculumData.words, startingAt: 0)
+                        return
+                    }
+                }
+                if self.activeIndex < self.activeDeck.count {
+                    self.presentWord(self.activeDeck[self.activeIndex])
                 }
             }
         }

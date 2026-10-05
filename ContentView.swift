@@ -144,11 +144,19 @@ public struct ContentView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text(word.tier.rawValue.uppercased())
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.orange)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(Color.orange.opacity(0.15))
+                    .cornerRadius(8)
+
+                Text("SET \(word.setNumber) OF 60")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white.opacity(0.8))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.1))
                     .cornerRadius(8)
 
                 Spacer()
@@ -309,8 +317,11 @@ public struct ContentView: View {
                             Text(tier.rawValue)
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
+                            Text("\(CurriculumData.wordsForTier(tier).count) words • 15 Progressive Sets")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.orange.opacity(0.85))
                             Text(tier.subtitle)
-                                .font(.system(size: 12))
+                                .font(.system(size: 11))
                                 .foregroundColor(.gray)
                                 .lineLimit(1)
                         }
@@ -347,6 +358,7 @@ public struct ContentView: View {
                         commandGuideRow("Root / Origin / Etymology", description: "Narrates Latin/Greek roots and morphological word family.")
                         commandGuideRow("Pause / Stop / Wait", description: "Temporarily pauses the audio session.")
                         commandGuideRow("Resume / Play / Continue", description: "Resumes audio playback exactly where you left off.")
+                        commandGuideRow("Hey Siri, start Hands-Free Vocab", description: "Launches the app and immediately starts automotive audio playback.")
                     }
                     .padding(24)
                 }

@@ -1,14 +1,43 @@
 //
 //  CurriculumData.swift
-//  VocabRoady
+//  Hands-Free Vocab
 //
-//  Curated high-yield vocabulary data bank with morpheme roots and phonetic breakdowns.
+//  1,800-Word Comprehensive Curriculum across 60 progressive automotive study sets.
+//  Loads the bundled CurriculumData.json with instant fallback.
 //
 
 import Foundation
 
 public struct CurriculumData {
-    public static let words: [VocabWord] = [
+    public static let words: [VocabWord] = {
+        // Attempt to load full 1,800-word dataset from CurriculumData.json bundle
+        if let url = Bundle.main.url(forResource: "CurriculumData", withExtension: "json"),
+           let data = try? Data(contentsOf: url) {
+            let decoder = JSONDecoder()
+            if let decoded = try? decoder.decode([VocabWord].self, from: data), !decoded.isEmpty {
+                print("[CurriculumData] Successfully loaded \(decoded.count) words across 60 sets from bundle.")
+                return decoded
+            }
+        }
+        
+        // Fallback embedded seed if bundle read fails
+        return seedFallbackWords
+    }()
+
+    public static var totalSetsCount: Int {
+        let maxSet = words.map { $0.setNumber }.max() ?? 60
+        return max(maxSet, 60)
+    }
+
+    public static func wordsForSet(_ setNumber: Int) -> [VocabWord] {
+        words.filter { $0.setNumber == setNumber }
+    }
+
+    public static func wordsForTier(_ tier: VocabTier) -> [VocabWord] {
+        words.filter { $0.tier == tier }
+    }
+
+    private static let seedFallbackWords: [VocabWord] = [
         VocabWord(
             word: "Perspicacious",
             phonetic: "/ˌpɜː.spɪˈkeɪ.ʃəs/",
@@ -20,7 +49,8 @@ public struct CurriculumData {
             exampleSentence: "The perspicacious CEO restructured the subsidiary months before the market contracted.",
             synonyms: ["Discerning", "Astute", "Shrewd"],
             antonyms: ["Obtuse", "Myopic"],
-            tier: .executive
+            tier: .executive,
+            setNumber: 1
         ),
         VocabWord(
             word: "Equivocate",
@@ -33,7 +63,8 @@ public struct CurriculumData {
             exampleSentence: "The spokesperson began to equivocate when pressed on executive compensation.",
             synonyms: ["Hedge", "Prevaricate", "Evade"],
             antonyms: ["Clarify", "Assert"],
-            tier: .executive
+            tier: .executive,
+            setNumber: 1
         ),
         VocabWord(
             word: "Salient",
@@ -46,7 +77,8 @@ public struct CurriculumData {
             exampleSentence: "He focused entirely on the salient points of the cross-border merger.",
             synonyms: ["Conspicuous", "Pivotal", "Striking"],
             antonyms: ["Inconspicuous", "Peripheral"],
-            tier: .executive
+            tier: .executive,
+            setNumber: 1
         ),
         VocabWord(
             word: "Obfuscate",
@@ -59,7 +91,8 @@ public struct CurriculumData {
             exampleSentence: "The auditor argued the accounting notes were drafted to obfuscate liabilities.",
             synonyms: ["Muddle", "Befuddle", "Cloud"],
             antonyms: ["Elucidate", "Clarify"],
-            tier: .executive
+            tier: .executive,
+            setNumber: 1
         ),
         VocabWord(
             word: "Germane",
@@ -72,371 +105,8 @@ public struct CurriculumData {
             exampleSentence: "Her insights on regulatory compliance were directly germane to the acquisition.",
             synonyms: ["Pertinent", "Apropos", "Applicable"],
             antonyms: ["Irrelevant", "Extraneous"],
-            tier: .executive
-        ),
-        VocabWord(
-            word: "Expedient",
-            phonetic: "/ɪkˈspiː.di.ənt/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Convenient and practical although perhaps improper",
-            fullDefinition: "Suitable for achieving a desired end with immediate efficiency, often disregarding ethics.",
-            etymology: "From Latin expedire (to free the feet, extricate).",
-            rootFamily: "Ped (foot)",
-            exampleSentence: "It was politically expedient to settle the lawsuit rather than risk trial publicity.",
-            synonyms: ["Pragmatic", "Opportunistic", "Tactical"],
-            antonyms: ["Principled", "Detrimental"],
-            tier: .executive
-        ),
-        VocabWord(
-            word: "Intransigent",
-            phonetic: "/ɪnˈtræn.sɪ.dʒənt/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Unwilling or refusing to change one's views",
-            fullDefinition: "Refusing to compromise or agree; firmly unyielding.",
-            etymology: "From Spanish los intransigentes, from Latin in- (not) + transigere (come to terms).",
-            rootFamily: "Ag / Act (to drive, do)",
-            exampleSentence: "The union leaders remained intransigent throughout the 48-hour negotiation.",
-            synonyms: ["Inflexible", "Obstinate", "Uncompromising"],
-            antonyms: ["Compliant", "Flexible"],
-            tier: .executive
-        ),
-        VocabWord(
-            word: "Tenuous",
-            phonetic: "/ˈten.ju.əs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Very weak or slight",
-            fullDefinition: "Having little substance or strength; flimsy, slender, or precarious.",
-            etymology: "From Latin tenuis (thin, slender).",
-            rootFamily: "Ten / Tenu (thin, hold)",
-            exampleSentence: "The prosecution presented a tenuous link between the transaction and the defendant.",
-            synonyms: ["Flimsy", "Precarious", "Fragile"],
-            antonyms: ["Robust", "Substantial"],
-            tier: .executive
-        ),
-        VocabWord(
-            word: "Pernicious",
-            phonetic: "/pəˈnɪʃ.əs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Having a harmful effect, especially in a gradual way",
-            fullDefinition: "Exceedingly harmful, destructive, or ruinous, often in an insidious manner.",
-            etymology: "From Latin perniciosus, from per- (completely) + nex (violent death).",
-            rootFamily: "Nec / Nic (death, harm)",
-            exampleSentence: "Corporate cynicism exerted a pernicious influence on employee retention.",
-            synonyms: ["Detrimental", "Insidious", "Noxious"],
-            antonyms: ["Beneficial", "Salubrious"],
-            tier: .executive
-        ),
-        VocabWord(
-            word: "Circumspect",
-            phonetic: "/ˈsɜː.kəm.spekt/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Wary and unwilling to take risks",
-            fullDefinition: "Thinking carefully about possible risks before acting or speaking.",
-            etymology: "From Latin circumspectus, from circum (around) + specere (to look).",
-            rootFamily: "Spec / Spic (to look)",
-            exampleSentence: "General counsel advised a circumspect response to regulatory inquiries.",
-            synonyms: ["Prudent", "Cautious", "Guarded"],
-            antonyms: ["Reckless", "Rash"],
-            tier: .executive
-        ),
-        VocabWord(
-            word: "Laconic",
-            phonetic: "/ləˈkɒn.ɪk/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Using very few words; concise",
-            fullDefinition: "Expressing much in few words; pithy and succinct without superfluous ornament.",
-            etymology: "From Greek Lakōnikos, referring to the terseness of Sparta.",
-            rootFamily: "Toponymic (Spartan)",
-            exampleSentence: "His laconic telegram stated simply: Mission accomplished.",
-            synonyms: ["Terse", "Succinct", "Pithy"],
-            antonyms: ["Loquacious", "Prolix"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Ephemeral",
-            phonetic: "/ɪˈfem.ər.əl/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Lasting for a very short time",
-            fullDefinition: "Fleeting and transient; lasting merely a momentary duration.",
-            etymology: "From Greek ephēmeros, from epi (on) + hēmera (day).",
-            rootFamily: "Hemer (day)",
-            exampleSentence: "Social media clout is notoriously ephemeral compared to institutional respect.",
-            synonyms: ["Evanescent", "Transient", "Fugacious"],
-            antonyms: ["Perennial", "Enduring"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Esoteric",
-            phonetic: "/ˌes.əˈter.ɪk/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Understood by only an enlightened few",
-            fullDefinition: "Confined to and understandable only by an inner circle of initiates.",
-            etymology: "From Greek esōterikos (inner), from esō (within).",
-            rootFamily: "Eso / Endo (inner)",
-            exampleSentence: "He wrote an esoteric monograph on algebraic topology.",
-            synonyms: ["Arcane", "Recondite", "Abstruse"],
-            antonyms: ["Exoteric", "Universal"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Ubiquitous",
-            phonetic: "/juːˈbɪk.wɪ.təs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Present and found everywhere",
-            fullDefinition: "Existing or being encountered everywhere simultaneously.",
-            etymology: "From Latin ubique (everywhere), from ubi (where).",
-            rootFamily: "Ubi (where)",
-            exampleSentence: "High-speed fiber connectivity has become ubiquitous across the capital city.",
-            synonyms: ["Omnipresent", "Pervasive", "Universal"],
-            antonyms: ["Scarce", "Rare"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Anachronistic",
-            phonetic: "/əˌnæk.rəˈnɪs.tɪk/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Belonging to a period other than that in which it exists",
-            fullDefinition: "Chronologically misplaced, outdated, or conspicuously out of harmony with the era.",
-            etymology: "From Greek ana- (against) + chronos (time).",
-            rootFamily: "Chron (time)",
-            exampleSentence: "Using physical paper forms in an automated operating theater felt wholly anachronistic.",
-            synonyms: ["Obsolete", "Archaic", "Outmoded"],
-            antonyms: ["Contemporary", "Futuristic"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Recalcitrant",
-            phonetic: "/rɪˈkæl.sɪ.trənt/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Having an obstinately uncooperative attitude",
-            fullDefinition: "Resisting authority or control; not obedient or compliant.",
-            etymology: "From Latin recalcitrare (to kick back), from calx (heel).",
-            rootFamily: "Calc (heel, stone)",
-            exampleSentence: "The recalcitrant committee member refused to sign the consensus document.",
-            synonyms: ["Defiant", "Refractory", "Intractable"],
-            antonyms: ["Docile", "Compliant"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Lugubrious",
-            phonetic: "/luːˈɡuː.bri.əs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Looking or sounding sad and dismal",
-            fullDefinition: "Excessively mournful, somber, or sorrowful, often to an exaggerated degree.",
-            etymology: "From Latin lugubris, from lugere (to mourn).",
-            rootFamily: "Lug (to mourn)",
-            exampleSentence: "The cellist played a lugubrious melody that silenced the gallery.",
-            synonyms: ["Mournful", "Dolorous", "Melancholy"],
-            antonyms: ["Jubilant", "Cheerful"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Proclivity",
-            phonetic: "/prəˈklɪv.ə.ti/",
-            partOfSpeech: "Noun",
-            shortDefinition: "A tendency to choose or do something regularly",
-            fullDefinition: "A natural inclination, predisposition, or leaning toward a particular behavior.",
-            etymology: "From Latin proclivitas, from pro- (forward) + clivus (slope).",
-            rootFamily: "Cliv (slope, incline)",
-            exampleSentence: "He possessed a known proclivity for contrarian macroeconomic arguments.",
-            synonyms: ["Propensity", "Predisposition", "Penchant"],
-            antonyms: ["Aversion", "Reluctance"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Fastidious",
-            phonetic: "/fæsˈtɪd.i.əs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Very attentive to and concerned about accuracy and detail",
-            fullDefinition: "Possessing meticulous, demanding standards; difficult to please.",
-            etymology: "From Latin fastidiosus (disdainful), from fastidium (disgust).",
-            rootFamily: "Fastid (loathing, pride)",
-            exampleSentence: "The surgical fellow was fastidious in his closure of each subcutaneous layer.",
-            synonyms: ["Meticulous", "Punctilious", "Scrupulous"],
-            antonyms: ["Careless", "Sloppy"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Mendacious",
-            phonetic: "/menˈdeɪ.ʃəs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Not telling the truth; lying",
-            fullDefinition: "Characterized by falsehood or deception; dishonest.",
-            etymology: "From Latin mendax (lying), related to mendum (fault, defect).",
-            rootFamily: "Mend (fault, blemish)",
-            exampleSentence: "The investigative journalist uncovered a series of mendacious press releases.",
-            synonyms: ["Untruthful", "Deceitful", "Fallacious"],
-            antonyms: ["Veracious", "Truthful"],
-            tier: .grePolymath
-        ),
-        VocabWord(
-            word: "Evanescent",
-            phonetic: "/ˌev.əˈnes.ənt/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Quickly fading or passing out of sight",
-            fullDefinition: "Tending to vanish like vapor; barely perceptible and quickly fading.",
-            etymology: "From Latin evanescere, from ex (out) + vanus (empty).",
-            rootFamily: "Van / Vain (empty, void)",
-            exampleSentence: "The evanescent colors of dawn gave way to the sharp brilliance of midday.",
-            synonyms: ["Fugitive", "Fleeting", "Transient"],
-            antonyms: ["Indelible", "Abiding"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Verisimilitude",
-            phonetic: "/ˌver.ɪ.sɪˈmɪl.ɪ.tjuːd/",
-            partOfSpeech: "Noun",
-            shortDefinition: "The appearance of being true or real",
-            fullDefinition: "The state of possessing the illusion of truth; genuine plausibility.",
-            etymology: "From Latin verus (true) + similis (like).",
-            rootFamily: "Ver (true) + Simil (like)",
-            exampleSentence: "The period costumes and authentic dialects gave the historical drama great verisimilitude.",
-            synonyms: ["Authenticity", "Plausibility", "Realism"],
-            antonyms: ["Implausibility", "Falsity"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Ineffable",
-            phonetic: "/ɪnˈef.ə.bəl/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Too great to be expressed in words",
-            fullDefinition: "Incapable of being uttered or described in speech due to overwhelming beauty.",
-            etymology: "From Latin in- (not) + effabilis (speakable).",
-            rootFamily: "Fa / Fess (to speak)",
-            exampleSentence: "Standing on the glacier, he felt an ineffable reverence for the ancient ice.",
-            synonyms: ["Indescribable", "Transcendent", "Unutterable"],
-            antonyms: ["Utterable", "Mundane"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Pulchritude",
-            phonetic: "/ˈpʌl.krɪ.tjuːd/",
-            partOfSpeech: "Noun",
-            shortDefinition: "Physical beauty or loveliness",
-            fullDefinition: "Great physical attractiveness and aesthetic grace.",
-            etymology: "From Latin pulchritudo, from pulcher (beautiful).",
-            rootFamily: "Pulchr (beautiful)",
-            exampleSentence: "The Renaissance painting celebrated the serene pulchritude of the young duchess.",
-            synonyms: ["Comeliness", "Attractiveness", "Beauty"],
-            antonyms: ["Ugliness", "Hideousness"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Mellifluous",
-            phonetic: "/meˈlɪf.lu.əs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Sweet or musical; pleasant to hear",
-            fullDefinition: "Flowing smoothly with honey-like richness and melodic grace.",
-            etymology: "From Latin mel (honey) + fluere (to flow).",
-            rootFamily: "Mel (honey) + Flu (to flow)",
-            exampleSentence: "Her mellifluous voice commanded absolute rapt attention from the audience.",
-            synonyms: ["Dulcet", "Euphonic", "Harmonious"],
-            antonyms: ["Cacophonous", "Strident"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Querulous",
-            phonetic: "/ˈkwer.jə.ləs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Complaining in a petulant or whining manner",
-            fullDefinition: "Full of complaints; habitually fretful and fault-finding.",
-            etymology: "From Latin querulus, from queri (to complain).",
-            rootFamily: "Quer (to complain)",
-            exampleSentence: "The tired traveler addressed the concierge in a querulous tone.",
-            synonyms: ["Petulant", "Peevish", "Whiny"],
-            antonyms: ["Affable", "Content"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Surreptitious",
-            phonetic: "/ˌsʌr.əpˈtɪʃ.əs/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Kept secret, especially because it would not be approved of",
-            fullDefinition: "Obtained, done, or made by stealth, clandestine maneuver, or deceit.",
-            etymology: "From Latin surrepticius, from sub- (secretly) + rapere (to seize).",
-            rootFamily: "Rapt / Rep (to seize, carry off)",
-            exampleSentence: "He cast a surreptitious glance at his rival's notes during the interval.",
-            synonyms: ["Clandestine", "Furtive", "Covert"],
-            antonyms: ["Overt", "Blatant"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Vicissitude",
-            phonetic: "/vɪˈsɪs.ɪ.tjuːd/",
-            partOfSpeech: "Noun",
-            shortDefinition: "A change of circumstances or fortune",
-            fullDefinition: "A mutation or unexpected change occurring in affairs or life circumstances.",
-            etymology: "From Latin vicissitudo, from vicissim (by turns).",
-            rootFamily: "Vic (turn, change, deputy)",
-            exampleSentence: "The merchant family endured the vicissitudes of war, depression, and political revolution.",
-            synonyms: ["Fluctuation", "Transformation", "Shift"],
-            antonyms: ["Stability", "Constancy"],
-            tier: .classicLit
-        ),
-        VocabWord(
-            word: "Iatrogenic",
-            phonetic: "/aɪˌæt.rəˈdʒen.ɪk/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Induced unintentionally by medical treatment",
-            fullDefinition: "Relating to illness or complications caused by medical examination or therapy.",
-            etymology: "From Greek iatros (physician) + -genic (producing).",
-            rootFamily: "Iatr (physician) + Gen (origin)",
-            exampleSentence: "The postoperative hematoma was an unfortunate iatrogenic complication.",
-            synonyms: ["Treatment-induced", "Clinical adverse effect"],
-            antonyms: ["Idiopathic", "Congenital"],
-            tier: .medicalLegal
-        ),
-        VocabWord(
-            word: "Exculpate",
-            phonetic: "/ˈek.skʌl.peɪt/",
-            partOfSpeech: "Verb",
-            shortDefinition: "Show that someone is not guilty of wrongdoing",
-            fullDefinition: "To clear from alleged fault or blame through definitive evidence.",
-            etymology: "From Latin ex- (out of) + culpa (fault, blame).",
-            rootFamily: "Culp (guilt, blame)",
-            exampleSentence: "The electronic audit logs completely exculpated the neurosurgeon.",
-            synonyms: ["Exonerate", "Absolve", "Vindicate"],
-            antonyms: ["Inculpate", "Incriminate"],
-            tier: .medicalLegal
-        ),
-        VocabWord(
-            word: "Nostrum",
-            phonetic: "/ˈnɒs.trəm/",
-            partOfSpeech: "Noun",
-            shortDefinition: "A medicine prepared by an unqualified person; patent remedy",
-            fullDefinition: "A pet scheme, favorite remedy, or untested therapeutic cure.",
-            etymology: "From Latin nostrum (our own), implying a proprietary secret potion.",
-            rootFamily: "Nos (we, ours)",
-            exampleSentence: "Regulatory agencies warned the public against purchasing fraudulent nostrums online.",
-            synonyms: ["Panacea", "Quack remedy", "Placebo"],
-            antonyms: ["Panacea verified", "Scientific therapeutic"],
-            tier: .medicalLegal
-        ),
-        VocabWord(
-            word: "Somnolent",
-            phonetic: "/ˈsɒm.nə.lənt/",
-            partOfSpeech: "Adjective",
-            shortDefinition: "Abnormally drowsy or sleepy",
-            fullDefinition: "Inclined to heavy sleep; lethargic or inducing sleep.",
-            etymology: "From Latin somnolentus, from somnus (sleep).",
-            rootFamily: "Somn (sleep)",
-            exampleSentence: "The high sedative dosage left the patient distinctly somnolent throughout observation.",
-            synonyms: ["Soporific", "Lethargic", "Torpid"],
-            antonyms: ["Alert", "Vigilant"],
-            tier: .medicalLegal
-        ),
-        VocabWord(
-            word: "Supervene",
-            phonetic: "/ˌsuː.pəˈviːn/",
-            partOfSpeech: "Verb",
-            shortDefinition: "Occur later than a specified event, as a complication",
-            fullDefinition: "To take place as an extraneous addition, unexpected complication, or development.",
-            etymology: "From Latin supervenire (to come upon, overtake).",
-            rootFamily: "Ven / Vent (to come)",
-            exampleSentence: "Sepsis supervened following the complicated intestinal perforation.",
-            synonyms: ["Follow", "Complicate", "Ensuing"],
-            antonyms: ["Precede", "Prevent"],
-            tier: .medicalLegal
-        ),
+            tier: .executive,
+            setNumber: 1
+        )
     ]
 }

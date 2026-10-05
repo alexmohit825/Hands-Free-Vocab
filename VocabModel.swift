@@ -51,6 +51,7 @@ public struct VocabWord: Identifiable, Codable, Equatable {
     public let synonyms: [String]
     public let antonyms: [String]
     public let tier: VocabTier
+    public let setNumber: Int
 
     // Spaced repetition metrics
     public var intervalDays: Int
@@ -70,7 +71,8 @@ public struct VocabWord: Identifiable, Codable, Equatable {
         exampleSentence: String,
         synonyms: [String],
         antonyms: [String],
-        tier: VocabTier
+        tier: VocabTier,
+        setNumber: Int = 1
     ) {
         self.id = word.lowercased()
         self.word = word
@@ -84,6 +86,7 @@ public struct VocabWord: Identifiable, Codable, Equatable {
         self.synonyms = synonyms
         self.antonyms = antonyms
         self.tier = tier
+        self.setNumber = setNumber
         self.intervalDays = 1
         self.easeFactor = 2.5
         self.repetitions = 0
