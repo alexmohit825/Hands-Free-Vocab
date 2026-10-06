@@ -110,16 +110,44 @@ public final class AudioCache: @unchecked Sendable {
 
     // MARK: - Core Render Implementation
 
+    public static func pickBestVoice(for localeCode: String = "en-US", preferredGender: AVSpeechSynthesisVoiceGender? = nil) -> AVSpeechSynthesisVoice {
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        let matchingLocale = allVoices.filter { $0.language == localeCode || $0.language.hasPrefix("en") }
+
+        // 1. Check for user-selected or premium / enhanced quality voices
+        let candidates = matchingLocale.filter { v in
+            if let gender = preferredGender {
+                return v.gender == gender
+            }
+            return true
+        }
+
+        // Prioritize: Premium > Enhanced > Default
+        // Also prioritize expressive natural voice names like Samantha, Ava, Zoe, Evan, Tom, Allison
+        if let premium = candidates.first(where: { $0.quality == .premium }) {
+            return premium
+        }
+        if let enhanced = candidates.first(where: { $0.quality == .enhanced }) {
+            return enhanced
+        }
+        if let naturalNamed = candidates.first(where: {
+            $0.name.contains("Ava") || $0.name.contains("Samantha") || $0.name.contains("Zoe") || $0.name.contains("Allison") || $0.name.contains("Tom")
+        }) {
+            return naturalNamed
+        }
+        if let firstMatch = candidates.first {
+            return firstMatch
+        }
+
+        return AVSpeechSynthesisVoice(language: localeCode) ?? AVSpeechSynthesisVoice(language: "en-US")!
+    }
+
     private func renderToFile(req: RenderRequest, dest: URL) throws {
         let voice: AVSpeechSynthesisVoice
         if !req.voiceID.isEmpty, let matched = AVSpeechSynthesisVoice(identifier: req.voiceID) {
             voice = matched
-        } else if let localeVoice = AVSpeechSynthesisVoice(language: req.localeCode) {
-            voice = localeVoice
-        } else if let fallback = AVSpeechSynthesisVoice(language: "en-US") {
-            voice = fallback
         } else {
-            throw AudioCacheError.voiceUnavailable
+            voice = Self.pickBestVoice(for: req.localeCode)
         }
 
         let utterance = AVSpeechUtterance(string: req.text)

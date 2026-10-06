@@ -48,6 +48,33 @@ public struct ContentView: View {
             .navigationTitle("Hands-Free Vocab")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button {
+                            voiceManager.selectedVoicePersona = "Natural Female (Ava / Samantha)"
+                        } label: {
+                            Label("Natural Female (Ava / Samantha)", systemImage: voiceManager.selectedVoicePersona.contains("Female") ? "checkmark" : "")
+                        }
+                        Button {
+                            voiceManager.selectedVoicePersona = "Natural Male (Evan / Tom)"
+                        } label: {
+                            Label("Natural Male (Evan / Tom)", systemImage: voiceManager.selectedVoicePersona.contains("Male") ? "checkmark" : "")
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.wave.2.fill")
+                                .font(.system(size: 15))
+                            Text(voiceManager.selectedVoicePersona.contains("Male") ? "Male" : "Female")
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.08))
+                        .cornerRadius(8)
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingVoiceCommandCheatSheet.toggle()

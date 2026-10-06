@@ -25,6 +25,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     @Published public var activeDeck: [VocabWord] = []
     @Published public var activeIndex: Int = 0
 
+    @Published public var selectedVoicePersona: String = "Natural Female (Ava / Samantha)"
+
     // Timing gaps calibrated for driver cognitive retrieval
     public var recallWindowSeconds: Double = 3.5
     private var recallTimer: Timer?
@@ -289,7 +291,18 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
             completion()
         }
 
-        let req = RenderRequest(text: text, localeCode: "en-US", rate: 0.50, pitch: 1.0, volume: 1.0, postGain: 1.0)
+        let gender: AVSpeechSynthesisVoiceGender? = selectedVoicePersona.contains("Male") ? .male : .female
+        let chosenVoice = AudioCache.pickBestVoice(for: "en-US", preferredGender: gender)
+        
+        let req = RenderRequest(
+            text: text,
+            localeCode: "en-US",
+            voiceID: chosenVoice.identifier,
+            rate: AVSpeechUtteranceDefaultSpeechRate * 0.90, // Calibrated natural pacing (relaxed human speed)
+            pitch: 1.02, // Warm, clear, non-monotone acoustic pitch
+            volume: 1.0,
+            postGain: 1.0
+        )
         AudioCache.shared.url(for: req) { [weak self] result in
             guard let self = self else { return }
             switch result {
@@ -325,9 +338,10 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
             self.directSynthesizer = synth
 
             let utterance = AVSpeechUtterance(string: text)
-            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
-            utterance.pitchMultiplier = 1.0
+            let gender: AVSpeechSynthesisVoiceGender? = self.selectedVoicePersona.contains("Male") ? .male : .female
+            utterance.voice = AudioCache.pickBestVoice(for: "en-US", preferredGender: gender)
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.90
+            utterance.pitchMultiplier = 1.02
             utterance.volume = 1.0
 
             self.isPlaying = true
