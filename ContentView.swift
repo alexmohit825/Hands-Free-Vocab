@@ -45,7 +45,7 @@ public struct ContentView: View {
                     .padding(.vertical, 16)
                 }
             }
-            .navigationTitle("Hands-Free Vocab")
+            .navigationTitle("Orator")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -373,7 +373,7 @@ public struct ContentView: View {
                 Color(red: 0.08, green: 0.09, blue: 0.12).ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        Text("Drive safely. Hands-Free Vocab requires zero touches or button pressing while you are behind the wheel.")
+                        Text("Drive safely. Orator requires zero touches or button pressing while you are behind the wheel.")
                             .font(.system(size: 15))
                             .foregroundColor(.gray)
 
@@ -385,7 +385,7 @@ public struct ContentView: View {
                         commandGuideRow("Root / Origin / Etymology", description: "Narrates Latin/Greek roots and morphological word family.")
                         commandGuideRow("Pause / Stop / Wait", description: "Temporarily pauses the audio session.")
                         commandGuideRow("Resume / Play / Continue", description: "Resumes audio playback exactly where you left off.")
-                        commandGuideRow("Hey Siri, start Hands-Free Vocab", description: "Launches the app and immediately starts automotive audio playback.")
+                        commandGuideRow("Hey Siri, start Orator", description: "Launches the app and immediately starts automotive audio playback.")
                     }
                     .padding(24)
                 }

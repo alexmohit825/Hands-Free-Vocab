@@ -11,8 +11,8 @@ import SwiftUI
 
 @available(iOS 17.0, *)
 public struct StartHandsFreeVocabIntent: AppIntent {
-    public static var title: LocalizedStringResource = "Start Hands-Free Vocab"
-    public static var description = IntentDescription("Launches Hands-Free Vocab and automatically begins your automotive vocabulary study session.")
+    public static var title: LocalizedStringResource = "Start Orator"
+    public static var description = IntentDescription("Launches Orator and automatically begins your automotive vocabulary study session.")
 
     public static var openAppWhenRun: Bool = true
 

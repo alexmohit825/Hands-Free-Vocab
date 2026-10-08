@@ -66,8 +66,8 @@ def render_all_screens(w, h, out_dir):
     s1 = create_bg(w, h, (10, 16, 28), (15, 23, 42))
     d1 = ImageDraw.Draw(s1)
     
-    d1.text((int(w/2), int(150 * scale)), "100% HANDS-FREE COMMUTE STUDY", font=f['title'], fill=electric_cyan, anchor='mt')
-    d1.text((int(w/2), int(235 * scale)), "Voice-Controlled Acoustic Vocabulary for Drivers & Commuters", font=f['sub'], fill=text_dim, anchor='mt')
+    d1.text((int(w/2), int(150 * scale)), "ORATOR: EXECUTIVE LEXICON", font=f['title'], fill=electric_cyan, anchor='mt')
+    d1.text((int(w/2), int(235 * scale)), "Voice-Driven Acoustic Vocabulary for Drivers & Professionals", font=f['sub'], fill=text_dim, anchor='mt')
     
     # Hero Card: Active Word Player
     hero1 = (int(70 * scale), int(330 * scale), int(w - 70 * scale), int(1080 * scale))
@@ -264,7 +264,7 @@ def render_all_screens(w, h, out_dir):
     hero4 = (int(70 * scale), int(330 * scale), int(w - 70 * scale), int(800 * scale))
     draw_card(d4, hero4, int(36 * scale), fill=card_bg, outline=card_border, width=2)
     d4.text((int(120 * scale), int(380 * scale)), "SIRI VOICE LAUNCH PROTOCOL", font=f['tag'], fill=mastered_green)
-    d4.text((int(120 * scale), int(430 * scale)), '"Hey Siri, start Hands-Free Vocab"', font=f['word_hero'], fill=text_white)
+    d4.text((int(120 * scale), int(430 * scale)), '"Hey Siri, start Orator"', font=f['word_hero'], fill=text_white)
     
     d4.text((int(120 * scale), int(550 * scale)), "• Native iOS App Intents (VocabAppIntents.swift)", font=f['body_bold'], fill=electric_cyan)
     d4.text((int(120 * scale), int(600 * scale)), "• Hands-free commute session launches immediately while driving", font=f['body'], fill=text_white)

@@ -380,7 +380,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: word.word.uppercased(),
             MPMediaItemPropertyArtist: "\(word.partOfSpeech) • \(word.phonetic)",
-            MPMediaItemPropertyAlbumTitle: "Hands-Free Vocab [\(status)]",
+            MPMediaItemPropertyAlbumTitle: "Orator [\(status)]",
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
             MPMediaItemPropertyPlaybackDuration: player?.duration ?? 30.0,
