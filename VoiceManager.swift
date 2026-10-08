@@ -24,6 +24,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     @Published public var playbackModeDescription: String = "Idle"
     @Published public var activeDeck: [VocabWord] = []
     @Published public var activeIndex: Int = 0
+    @Published public var shouldShowPaywall: Bool = false
 
     @Published public var selectedVoicePersona: String = "Natural Female (Ava / Samantha)"
 
@@ -216,6 +217,19 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     }
 
     private func announceSetTransition(completedSet: Int, nextSet: Int, isFullDeckProgression: Bool = false) {
+        if nextSet > 1 && !StoreKitManager.shared.isUnlocked {
+            let announcement = "Set \(completedSet) complete. To continue to Set 2 and unlock all 60 sets, please unlock Orator Lifetime Full Access."
+            self.playbackModeDescription = "Unlock Lifetime Access"
+            speakText(announcement) { [weak self] in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.shouldShowPaywall = true
+                    self.isPlaying = false
+                }
+            }
+            return
+        }
+
         let announcement = "Set \(completedSet) complete. Moving to Set \(nextSet)."
         self.playbackModeDescription = "Transitioning to Set \(nextSet)..."
 

@@ -12,7 +12,9 @@ import AVFoundation
 public struct ContentView: View {
     @ObservedObject var voiceManager = VoiceManager.shared
     @ObservedObject var voiceCommander = VoiceCommander.shared
+    @ObservedObject var storeManager = StoreKitManager.shared
     @State private var showingVoiceCommandCheatSheet: Bool = false
+    @State private var showingPaywall: Bool = false
     @State private var hasRequestedPermissions: Bool = false
 
     public init() {}
@@ -76,17 +78,46 @@ public struct ContentView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingVoiceCommandCheatSheet.toggle()
-                    } label: {
-                        Image(systemName: "waveform.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.orange)
+                    HStack(spacing: 10) {
+                        if !storeManager.isUnlocked {
+                            Button {
+                                showingPaywall = true
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "crown.fill")
+                                        .font(.system(size: 11))
+                                    Text("Unlock")
+                                        .font(.system(size: 12, weight: .bold))
+                                }
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.yellow)
+                                .cornerRadius(12)
+                            }
+                        }
+
+                        Button {
+                            showingVoiceCommandCheatSheet.toggle()
+                        } label: {
+                            Image(systemName: "waveform.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.orange)
+                        }
                     }
                 }
             }
             .sheet(isPresented: $showingVoiceCommandCheatSheet) {
                 voiceCommandSheet
+            }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView()
+            }
+            .onReceive(voiceManager.$shouldShowPaywall) { show in
+                if show {
+                    showingPaywall = true
+                    voiceManager.shouldShowPaywall = false
+                }
             }
             .onAppear {
                 // Warm up audio session and pre-request speech permissions
@@ -344,9 +375,9 @@ public struct ContentView: View {
                             Text(tier.rawValue)
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
-                            Text("\(CurriculumData.wordsForTier(tier).count) words • 15 Progressive Sets")
+                            Text(storeManager.isUnlocked ? "\(CurriculumData.wordsForTier(tier).count) words • 15 Sets (Unlocked)" : "Set 1 Free • 15 Sets Total")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.orange.opacity(0.85))
+                                .foregroundColor(storeManager.isUnlocked ? .green.opacity(0.85) : .yellow.opacity(0.85))
                             Text(tier.subtitle)
                                 .font(.system(size: 11))
                                 .foregroundColor(.gray)
@@ -354,6 +385,12 @@ public struct ContentView: View {
                         }
 
                         Spacer()
+
+                        if !storeManager.isUnlocked {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.yellow.opacity(0.8))
+                        }
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .bold))
