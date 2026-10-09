@@ -218,7 +218,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     }
 
     private func announceSetTransition(completedSet: Int, nextSet: Int, isFullDeckProgression: Bool = false) {
-        if nextSet > 1 && !StoreKitManager.shared.isUnlocked {
+        if nextSet > 1 && !StoreKitManager.isUnlockedLocally {
             let announcement = "Set \(completedSet) complete. To continue to Set 2 and unlock all 60 sets, please unlock Orator Lifetime Full Access."
             self.playbackModeDescription = "Unlock Lifetime Access"
             let trackId = (completedSet == 1) ? "set1_complete_unlock" : nil

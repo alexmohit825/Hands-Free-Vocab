@@ -11,6 +11,10 @@ public final class StoreKitManager: ObservableObject {
     /// Product ID registered in App Store Connect
     public static let lifetimeProductID = "com.Alex.HandsFreeVocab.lifetime_unlock"
 
+    public nonisolated static var isUnlockedLocally: Bool {
+        UserDefaults.standard.bool(forKey: "orator_is_unlocked")
+    }
+
     @Published public private(set) var isUnlocked: Bool = false
     @Published public private(set) var lifetimeProduct: Product? = nil
     @Published public private(set) var isPurchasing: Bool = false
