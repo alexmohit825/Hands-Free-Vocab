@@ -1,10 +1,12 @@
 //
 //  AudioCache.swift
-//  Hands-Free Vocab
+//  Orator: Executive Lexicon
 //
-//  Pre-renders AVSpeechSynthesizer output to .caf files in the app's
-//  Documents directory, then plays them back via AVAudioPlayer.
-//  Matching Hands-Free Lingo proven architecture.
+//  Hybrid Neural Voice Architecture:
+//  1. Fast-Path App Bundle: Instant 0ms playback from pre-rendered studio neural .wav files (e.g. Set 1 free tier).
+//  2. Local Disk Cache: Instant 0ms playback from Documents/AudioCache/ for previously synthesized neural clips.
+//  3. Edge Neural Streaming: Fetches studio-grade 24kHz audio from Cloudflare Worker proxy powered by Gemini 3.8 Flash TTS.
+//  4. Offline Synthesizer Fallback: Uses on-device AVSpeechSynthesizer if device is offline and clip is not cached.
 //
 
 import Foundation
@@ -24,8 +26,8 @@ public struct RenderRequest {
         text: String,
         localeCode: String = "en-US",
         voiceID: String = "",
-        rate: Float = AVSpeechUtteranceDefaultSpeechRate * 0.95,
-        pitch: Float = 1.0,
+        rate: Float = AVSpeechUtteranceDefaultSpeechRate * 0.90,
+        pitch: Float = 1.02,
         volume: Float = 1.0,
         postGain: Float = 1.0
     ) {
@@ -48,6 +50,9 @@ public enum AudioCacheError: Error {
 public final class AudioCache: @unchecked Sendable {
     public static let shared = AudioCache()
 
+    // Cloudflare Edge Proxy Endpoint (Rule 11 Compliant, Zero Key Exposure)
+    public static let edgeProxyURL = URL(string: "https://orator-tts.mohalex.workers.dev/api/tts")!
+
     private let renderQueue = DispatchQueue(label: "com.Alex.HandsFreeVocab.AudioCache.render",
                                             qos: .userInitiated)
 
@@ -58,24 +63,51 @@ public final class AudioCache: @unchecked Sendable {
         _ = try? Self.ensureCacheRoot()
     }
 
-    // MARK: - Public API
+    // MARK: - Primary Neural Audio Resolver
 
-    public func url(for req: RenderRequest,
-                    completion: @escaping (Result<URL, Error>) -> Void) {
-        let path: URL
+    /// Resolves human-grade neural audio for a vocabulary track (hook, example, etymology, deep) or announcement.
+    public func url(
+        forWordId wordId: String? = nil,
+        kind: String? = nil,
+        text: String,
+        voicePersona: String = "Aoede",
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        let voiceName = voicePersona.contains("Male") ? "Puck" : "Aoede"
+        let baseFilename: String
+        if let wid = wordId, let k = kind {
+            baseFilename = (voiceName == "Puck") ? "\(wid.lowercased())_\(k)_puck" : "\(wid.lowercased())_\(k)"
+        } else {
+            baseFilename = Self.hashKey(text: text, voice: voiceName)
+        }
+
+        // 1. Fast-Path: Check Bundled Studio Audio in App Bundle (Set 1 & Core Announcements)
+        if let bundleURL = Bundle.main.url(forResource: baseFilename, withExtension: "wav") ??
+                           Bundle.main.url(forResource: baseFilename, withExtension: "wav", subdirectory: "BundledAudio") ??
+                           Bundle.main.url(forResource: baseFilename, withExtension: "caf") {
+            DispatchQueue.main.async { completion(.success(bundleURL)) }
+            return
+        }
+
+        // 2. Check Local Disk Cache in Documents/AudioCache/
+        let cacheDest: URL
         do {
-            path = try Self.cacheURL(for: req)
+            let root = try Self.ensureCacheRoot()
+            cacheDest = root.appendingPathComponent("\(baseFilename).wav")
         } catch {
             DispatchQueue.main.async { completion(.failure(error)) }
             return
         }
 
-        if FileManager.default.fileExists(atPath: path.path) {
-            DispatchQueue.main.async { completion(.success(path)) }
+        if FileManager.default.fileExists(atPath: cacheDest.path),
+           let attr = try? FileManager.default.attributesOfItem(atPath: cacheDest.path),
+           (attr[.size] as? UInt64 ?? 0) > 2000 {
+            DispatchQueue.main.async { completion(.success(cacheDest)) }
             return
         }
 
-        let key = path.path
+        // 3. Deduplicate In-Flight Requests
+        let key = cacheDest.path
         inFlightLock.lock()
         if var waiters = inFlight[key] {
             waiters.append(completion)
@@ -87,34 +119,120 @@ public final class AudioCache: @unchecked Sendable {
         }
         inFlightLock.unlock()
 
-        renderQueue.async { [weak self] in
+        // 4. Download from Neural TTS Proxy
+        fetchNeuralTTS(text: text, voiceName: voiceName, dest: cacheDest) { [weak self] result in
             guard let self = self else { return }
-            let result: Result<URL, Error>
-            do {
-                try self.renderToFile(req: req, dest: path)
-                result = .success(path)
-            } catch {
-                result = .failure(error)
-            }
 
-            self.inFlightLock.lock()
-            let waiters = self.inFlight[key] ?? []
-            self.inFlight[key] = nil
-            self.inFlightLock.unlock()
-
-            DispatchQueue.main.async {
-                for cb in waiters { cb(result) }
+            switch result {
+            case .success(let fileURL):
+                self.notifyWaiters(key: key, result: .success(fileURL))
+            case .failure(let neuralError):
+                print("[AudioCache] Neural TTS fetch failed: \(neuralError). Falling back to on-device synthesizer.")
+                // 5. Fallback: Synthesize with local AVSpeechSynthesizer to destination
+                let req = RenderRequest(
+                    text: text,
+                    localeCode: "en-US",
+                    voiceID: "",
+                    rate: AVSpeechUtteranceDefaultSpeechRate * 0.90,
+                    pitch: 1.02
+                )
+                self.renderQueue.async {
+                    let fallbackResult: Result<URL, Error>
+                    do {
+                        try self.renderToFile(req: req, dest: cacheDest)
+                        fallbackResult = .success(cacheDest)
+                    } catch {
+                        fallbackResult = .failure(error)
+                    }
+                    self.notifyWaiters(key: key, result: fallbackResult)
+                }
             }
         }
     }
 
-    // MARK: - Core Render Implementation
+    private func notifyWaiters(key: String, result: Result<URL, Error>) {
+        inFlightLock.lock()
+        let waiters = inFlight[key] ?? []
+        inFlight[key] = nil
+        inFlightLock.unlock()
+
+        DispatchQueue.main.async {
+            for cb in waiters { cb(result) }
+        }
+    }
+
+    // MARK: - Neural TTS Network Fetch
+
+    private func fetchNeuralTTS(
+        text: String,
+        voiceName: String,
+        dest: URL,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        var request = URLRequest(url: Self.edgeProxyURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Orator/1.0 (iOS; NeuralAudioEngine)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 12.0
+
+        let payload: [String: String] = [
+            "text": text,
+            "voice": voiceName
+        ]
+
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: payload) else {
+            completion(.failure(AudioCacheError.renderFailed("Failed to encode JSON payload")))
+            return
+        }
+        request.httpBody = httpBody
+
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let httpResp = response as? HTTPURLResponse,
+                  (200...299).contains(httpResp.statusCode),
+                  let data = data,
+                  data.count > 1000 else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                completion(.failure(AudioCacheError.renderFailed("Edge proxy HTTP \(code)")))
+                return
+            }
+
+            do {
+                try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: dest, options: .atomic)
+                completion(.success(dest))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+        task.resume()
+    }
+
+    // MARK: - Spaced Repetition Background Pre-Fetching
+
+    public func prefetchWord(_ word: VocabWord, voicePersona: String = "Aoede") {
+        renderQueue.async {
+            self.url(forWordId: word.id, kind: "hook", text: word.spokenAcousticHook, voicePersona: voicePersona) { _ in }
+            self.url(forWordId: word.id, kind: "example", text: word.spokenExampleScript, voicePersona: voicePersona) { _ in }
+        }
+    }
+
+    // MARK: - Backward-Compatible url(for: RenderRequest)
+
+    public func url(for req: RenderRequest, completion: @escaping (Result<URL, Error>) -> Void) {
+        url(forWordId: nil, kind: nil, text: req.text, voicePersona: "Aoede", completion: completion)
+    }
+
+    // MARK: - On-Device AVSpeechSynthesizer Fallback Engine
 
     public static func pickBestVoice(for localeCode: String = "en-US", preferredGender: AVSpeechSynthesisVoiceGender? = nil) -> AVSpeechSynthesisVoice {
         let allVoices = AVSpeechSynthesisVoice.speechVoices()
         let matchingLocale = allVoices.filter { $0.language == localeCode || $0.language.hasPrefix("en") }
 
-        // 1. Check for user-selected or premium / enhanced quality voices
         let candidates = matchingLocale.filter { v in
             if let gender = preferredGender {
                 return v.gender == gender
@@ -122,16 +240,18 @@ public final class AudioCache: @unchecked Sendable {
             return true
         }
 
-        // Prioritize: Premium > Enhanced > Default
-        // Also prioritize expressive natural voice names like Samantha, Ava, Zoe, Evan, Tom, Allison
+        // Prioritize: Premium > Enhanced > Siri Voices
         if let premium = candidates.first(where: { $0.quality == .premium }) {
             return premium
         }
         if let enhanced = candidates.first(where: { $0.quality == .enhanced }) {
             return enhanced
         }
+        if let siri = candidates.first(where: { $0.identifier.contains("siri") }) {
+            return siri
+        }
         if let naturalNamed = candidates.first(where: {
-            $0.name.contains("Ava") || $0.name.contains("Samantha") || $0.name.contains("Zoe") || $0.name.contains("Allison") || $0.name.contains("Tom")
+            $0.name.contains("Ava") || $0.name.contains("Zoe") || $0.name.contains("Allison") || $0.name.contains("Evan")
         }) {
             return naturalNamed
         }
@@ -165,7 +285,6 @@ public final class AudioCache: @unchecked Sendable {
         let tmp = dest.deletingLastPathComponent()
             .appendingPathComponent(UUID().uuidString + ".tmp.caf")
 
-        // Semaphore waits for buffer drainage until EOF empty buffer
         let sem = DispatchSemaphore(value: 0)
         var didFinish = false
 
@@ -177,7 +296,6 @@ public final class AudioCache: @unchecked Sendable {
             }
 
             if pcm.frameLength == 0 {
-                // EOF marker from AVSpeechSynthesizer
                 if !didFinish { didFinish = true; sem.signal() }
                 return
             }
@@ -243,27 +361,11 @@ public final class AudioCache: @unchecked Sendable {
         return root
     }
 
-    private static func cacheURL(for req: RenderRequest) throws -> URL {
-        let root = try ensureCacheRoot()
-        let langDir = root.appendingPathComponent(req.localeCode, isDirectory: true)
-        try FileManager.default.createDirectory(at: langDir,
-                                                withIntermediateDirectories: true)
-        return langDir.appendingPathComponent(Self.key(for: req) + ".caf")
-    }
-
-    private static func key(for req: RenderRequest) -> String {
+    private static func hashKey(text: String, voice: String) -> String {
         var hasher = Insecure.SHA1()
-        hasher.update(data: Data(req.text.utf8))
+        hasher.update(data: Data(text.utf8))
         hasher.update(data: Data("|".utf8))
-        hasher.update(data: Data(req.voiceID.utf8))
-        hasher.update(data: Data("|".utf8))
-        hasher.update(data: Data(String(format: "%.3f", req.rate).utf8))
-        hasher.update(data: Data("|".utf8))
-        hasher.update(data: Data(String(format: "%.3f", req.pitch).utf8))
-        hasher.update(data: Data("|".utf8))
-        hasher.update(data: Data(String(format: "%.3f", req.volume).utf8))
-        hasher.update(data: Data("|".utf8))
-        hasher.update(data: Data(String(format: "%.3f", req.postGain).utf8))
+        hasher.update(data: Data(voice.utf8))
         let digest = hasher.finalize()
         return digest.map { String(format: "%02x", $0) }.joined()
     }

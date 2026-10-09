@@ -53,14 +53,14 @@ public struct ContentView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
                         Button {
-                            voiceManager.selectedVoicePersona = "Natural Female (Ava / Samantha)"
+                            voiceManager.selectedVoicePersona = "Aoede (Executive Female)"
                         } label: {
-                            Label("Natural Female (Ava / Samantha)", systemImage: voiceManager.selectedVoicePersona.contains("Female") ? "checkmark" : "")
+                            Label("Aoede (Executive Female)", systemImage: voiceManager.selectedVoicePersona.contains("Female") ? "checkmark" : "")
                         }
                         Button {
-                            voiceManager.selectedVoicePersona = "Natural Male (Evan / Tom)"
+                            voiceManager.selectedVoicePersona = "Puck (Executive Male)"
                         } label: {
-                            Label("Natural Male (Evan / Tom)", systemImage: voiceManager.selectedVoicePersona.contains("Male") ? "checkmark" : "")
+                            Label("Puck (Executive Male)", systemImage: voiceManager.selectedVoicePersona.contains("Male") ? "checkmark" : "")
                         }
                     } label: {
                         HStack(spacing: 4) {
@@ -263,7 +263,7 @@ public struct ContentView: View {
 
             // Driver Status Mode Banner & Manual Audio Tap
             Button {
-                voiceManager.speakText(word.spokenAcousticHook) {}
+                voiceManager.speakWordTrack(wordId: word.id, kind: "hook", text: word.spokenAcousticHook) {}
             } label: {
                 HStack {
                     Image(systemName: voiceManager.isPlaying ? "speaker.wave.3.fill" : "speaker.wave.2.fill")

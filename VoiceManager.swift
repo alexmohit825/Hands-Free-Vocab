@@ -1,9 +1,9 @@
 //
 //  VoiceManager.swift
-//  Hands-Free Vocab
+//  Orator: Executive Lexicon
 //
 //  Automotive Audio Director & Spaced Repetition Playback Orchestrator.
-//  Matches Hands-Free Lingo audio session priority and route-holding architecture.
+//  Hybrid Neural Architecture: Bundled Studio Audio -> Cached Neural Audio -> Cloudflare Edge Streaming -> Synthesizer Fallback.
 //
 
 import Foundation
@@ -26,7 +26,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     @Published public var activeIndex: Int = 0
     @Published public var shouldShowPaywall: Bool = false
 
-    @Published public var selectedVoicePersona: String = "Natural Female (Ava / Samantha)"
+    @Published public var selectedVoicePersona: String = "Aoede (Executive Female)"
 
     // Timing gaps calibrated for driver cognitive retrieval
     public var recallWindowSeconds: Double = 3.5
@@ -48,8 +48,6 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     public func configureAudioSessionIfNeeded() {
         let session = AVAudioSession.sharedInstance()
         do {
-            // .playAndRecord allows both microphone input and full-volume speaker output.
-            // .defaultToSpeaker ensures sound routes to the bottom loud speaker / car Bluetooth instead of receiver.
             try session.setCategory(.playAndRecord,
                                     mode: .spokenAudio,
                                     options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowAirPlay])
@@ -107,7 +105,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         self.playbackModeDescription = "Presenting Word"
         updateNowPlaying(with: word, status: "Acoustic Hook")
 
-        speakText(word.spokenAcousticHook) { [weak self] in
+        speakWordTrack(wordId: word.id, kind: "hook", text: word.spokenAcousticHook) { [weak self] in
             guard let self = self else { return }
             self.playbackModeDescription = "Listening for voice ('Next', 'Repeat', 'Mastered')..."
 
@@ -116,6 +114,12 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
                 self?.deliverContextualExample()
             }
         }
+
+        // Background Pre-fetch next word for 0ms transition
+        let nextIdx = activeIndex + 1
+        if nextIdx < activeDeck.count {
+            AudioCache.shared.prefetchWord(activeDeck[nextIdx], voicePersona: selectedVoicePersona)
+        }
     }
 
     public func deliverContextualExample() {
@@ -123,7 +127,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         self.playbackModeDescription = "Contextual Sentence"
         updateNowPlaying(with: word, status: "Contextual Usage")
 
-        speakText(word.spokenExampleScript) { [weak self] in
+        speakWordTrack(wordId: word.id, kind: "example", text: word.spokenExampleScript) { [weak self] in
             guard let self = self else { return }
             self.playbackModeDescription = "Awaiting Command ('Next' to proceed)"
 
@@ -140,7 +144,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         self.playbackModeDescription = "Etymology & Roots"
         updateNowPlaying(with: word, status: "Root Analysis")
 
-        speakText(word.spokenEtymologyScript) { [weak self] in
+        speakWordTrack(wordId: word.id, kind: "etymology", text: word.spokenEtymologyScript) { [weak self] in
             self?.playbackModeDescription = "Awaiting Command ('Next' to proceed)"
         }
     }
@@ -150,7 +154,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         self.playbackModeDescription = "Detailed Elaboration"
         updateNowPlaying(with: word, status: "Deep Definition")
 
-        speakText(word.spokenDetailedScript) { [weak self] in
+        speakWordTrack(wordId: word.id, kind: "deep", text: word.spokenDetailedScript) { [weak self] in
             self?.playbackModeDescription = "Awaiting Command ('Next' to proceed)"
         }
     }
@@ -198,7 +202,6 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
             let nextSet = activeDeck[nextIndex].setNumber
 
             if previousSet != nextSet {
-                // Moving into a new set in the active deck
                 activeIndex = nextIndex
                 announceSetTransition(completedSet: previousSet, nextSet: nextSet)
             } else {
@@ -206,8 +209,6 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
                 presentWord(activeDeck[activeIndex])
             }
         } else if nextIndex >= activeDeck.count {
-            // Reached the end of the current active deck!
-            // Check if user is studying a single set, a tier, or the master deck
             let currentSet = activeDeck[activeIndex].setNumber
             let totalSets = CurriculumData.totalSetsCount
             let nextSet = (currentSet >= totalSets) ? 1 : currentSet + 1
@@ -220,7 +221,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         if nextSet > 1 && !StoreKitManager.shared.isUnlocked {
             let announcement = "Set \(completedSet) complete. To continue to Set 2 and unlock all 60 sets, please unlock Orator Lifetime Full Access."
             self.playbackModeDescription = "Unlock Lifetime Access"
-            speakText(announcement) { [weak self] in
+            let trackId = (completedSet == 1) ? "set1_complete_unlock" : nil
+            speakWordTrack(wordId: trackId, kind: nil, text: announcement) { [weak self] in
                 guard let self = self else { return }
                 DispatchQueue.main.async {
                     self.shouldShowPaywall = true
@@ -232,10 +234,10 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
 
         let announcement = "Set \(completedSet) complete. Moving to Set \(nextSet)."
         self.playbackModeDescription = "Transitioning to Set \(nextSet)..."
+        let trackId = (completedSet == 1 && nextSet == 2) ? "set1_complete_next" : nil
 
-        speakText(announcement) { [weak self] in
+        speakWordTrack(wordId: trackId, kind: nil, text: announcement) { [weak self] in
             guard let self = self else { return }
-            // 2-second pause requested by user before starting next set
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 guard let self = self else { return }
                 if isFullDeckProgression {
@@ -289,7 +291,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
 
     // MARK: - Speech Audio Playback Pipeline
 
-    public func speakText(_ text: String, completion: @escaping () -> Void) {
+    public func speakWordTrack(wordId: String? = nil, kind: String? = nil, text: String, completion: @escaping () -> Void) {
         configureAudioSessionIfNeeded()
 
         // Temporarily pause speech recognition while speaking to prevent feedback/audio conflicts
@@ -300,24 +302,11 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         directSynthesizer?.stopSpeaking(at: .immediate)
 
         self.completionHandler = { [weak self] in
-            // Re-engage speech recognition once the app finishes speaking
             VoiceCommander.shared.startContinuousListening()
             completion()
         }
 
-        let gender: AVSpeechSynthesisVoiceGender? = selectedVoicePersona.contains("Male") ? .male : .female
-        let chosenVoice = AudioCache.pickBestVoice(for: "en-US", preferredGender: gender)
-        
-        let req = RenderRequest(
-            text: text,
-            localeCode: "en-US",
-            voiceID: chosenVoice.identifier,
-            rate: AVSpeechUtteranceDefaultSpeechRate * 0.90, // Calibrated natural pacing (relaxed human speed)
-            pitch: 1.02, // Warm, clear, non-monotone acoustic pitch
-            volume: 1.0,
-            postGain: 1.0
-        )
-        AudioCache.shared.url(for: req) { [weak self] result in
+        AudioCache.shared.url(forWordId: wordId, kind: kind, text: text, voicePersona: selectedVoicePersona) { [weak self] result in
             guard let self = self else { return }
             switch result {
             case .success(let url):
@@ -342,6 +331,10 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
                 self.speakDirectly(text: text)
             }
         }
+    }
+
+    public func speakText(_ text: String, completion: @escaping () -> Void) {
+        speakWordTrack(wordId: nil, kind: nil, text: text, completion: completion)
     }
 
     private func speakDirectly(text: String) {

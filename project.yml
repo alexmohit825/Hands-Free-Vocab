@@ -33,6 +33,10 @@ targets:
           - "**/.github"
           - "project.yml"
           - "ExportOptions.plist"
+          - "worker"
+          - "docs"
+          - "screenshots"
+          - "*.py"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.Alex.HandsFreeVocab
