@@ -14,6 +14,7 @@ public struct ContentView: View {
     @ObservedObject var voiceCommander = VoiceCommander.shared
     @ObservedObject var storeManager = StoreKitManager.shared
     @State private var showingVoiceCommandCheatSheet: Bool = false
+    @State private var showingVoiceAuditionSheet: Bool = false
     @State private var showingPaywall: Bool = false
     @State private var hasRequestedPermissions: Bool = false
 
@@ -51,27 +52,19 @@ public struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button {
-                            voiceManager.selectedVoicePersona = "Aoede (Executive Female)"
-                        } label: {
-                            Label("Aoede (Executive Female)", systemImage: voiceManager.selectedVoicePersona.contains("Female") ? "checkmark" : "")
-                        }
-                        Button {
-                            voiceManager.selectedVoicePersona = "Puck (Executive Male)"
-                        } label: {
-                            Label("Puck (Executive Male)", systemImage: voiceManager.selectedVoicePersona.contains("Male") ? "checkmark" : "")
-                        }
+                    Button {
+                        showingVoiceAuditionSheet = true
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "person.wave.2.fill")
-                                .font(.system(size: 15))
-                            Text(voiceManager.selectedVoicePersona.contains("Male") ? "Male" : "Female")
+                        HStack(spacing: 5) {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.system(size: 13))
+                            Text(voiceManager.selectedVoiceName)
                                 .font(.system(size: 13, weight: .bold))
+                                .lineLimit(1)
                         }
                         .foregroundColor(.orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
                         .background(Color.white.opacity(0.08))
                         .cornerRadius(8)
                     }
@@ -106,6 +99,9 @@ public struct ContentView: View {
                         }
                     }
                 }
+            }
+            .sheet(isPresented: $showingVoiceAuditionSheet) {
+                VoiceAuditionSheet()
             }
             .sheet(isPresented: $showingVoiceCommandCheatSheet) {
                 voiceCommandSheet

@@ -26,7 +26,13 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     @Published public var activeIndex: Int = 0
     @Published public var shouldShowPaywall: Bool = false
 
-    @Published public var selectedVoicePersona: String = "Aoede (Executive Female)"
+    @Published public var selectedVoiceIdentifier: String = ""
+    @Published public var selectedVoiceName: String = "Natural Orator"
+
+    public var selectedVoicePersona: String {
+        get { selectedVoiceIdentifier }
+        set { selectedVoiceIdentifier = newValue }
+    }
 
     // Timing gaps calibrated for driver cognitive retrieval
     public var recallWindowSeconds: Double = 3.5
@@ -34,10 +40,27 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
 
     private override init() {
         super.init()
+        let best = AudioCache.pickBestVoice()
+        if let savedID = UserDefaults.standard.string(forKey: "orator_selected_voice_id"),
+           let savedVoice = AVSpeechSynthesisVoice(identifier: savedID) {
+            self.selectedVoiceIdentifier = savedVoice.identifier
+            self.selectedVoiceName = savedVoice.name
+        } else {
+            self.selectedVoiceIdentifier = best.identifier
+            self.selectedVoiceName = best.name
+        }
         self.activeDeck = CurriculumData.words
         VoiceCommander.shared.delegate = self
         observeInterruptions()
         observeAppLifecycle()
+    }
+
+    public func selectVoice(identifier: String) {
+        if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
+            self.selectedVoiceIdentifier = voice.identifier
+            self.selectedVoiceName = voice.name
+            UserDefaults.standard.set(voice.identifier, forKey: "orator_selected_voice_id")
+        }
     }
 
     private var directSynthesizer: AVSpeechSynthesizer?
@@ -118,7 +141,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         // Background Pre-fetch next word for 0ms transition
         let nextIdx = activeIndex + 1
         if nextIdx < activeDeck.count {
-            AudioCache.shared.prefetchWord(activeDeck[nextIdx], voicePersona: selectedVoicePersona)
+            AudioCache.shared.prefetchWord(activeDeck[nextIdx], voicePersona: selectedVoiceIdentifier)
         }
     }
 
@@ -306,7 +329,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
             completion()
         }
 
-        AudioCache.shared.url(forWordId: wordId, kind: kind, text: text, voicePersona: selectedVoicePersona) { [weak self] result in
+        AudioCache.shared.url(forWordId: wordId, kind: kind, text: text, voicePersona: selectedVoiceIdentifier) { [weak self] result in
             guard let self = self else { return }
             switch result {
             case .success(let url):
@@ -345,9 +368,9 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
             self.directSynthesizer = synth
 
             let utterance = AVSpeechUtterance(string: text)
-            let gender: AVSpeechSynthesisVoiceGender? = self.selectedVoicePersona.contains("Male") ? .male : .female
-            utterance.voice = AudioCache.pickBestVoice(for: "en-US", preferredGender: gender)
-            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.90
+            let chosenVoice = AudioCache.pickBestVoice(preferredIdentifier: self.selectedVoiceIdentifier)
+            utterance.voice = chosenVoice
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.88
             utterance.pitchMultiplier = 1.02
             utterance.volume = 1.0
 
