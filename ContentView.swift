@@ -1,8 +1,12 @@
 //
 //  ContentView.swift
-//  Hands-Free Vocab
+//  Orator: Executive Lexicon
 //
-//  iPhone Companion Studio & In-Car Mirroring Dashboard.
+//  Premier App Store Architecture:
+//  - Tab 1: Words (Daily Executive Card matching premier archetype with classic Serif typography)
+//  - Tab 2: Practice (Executive Rank bell curve, Sprint/Rush challenges, interactive recall quiz)
+//  - Tab 3: Tracks (The 4 specialized collegiate curricula)
+//  - Tab 4: Drive (100% hands-free automotive cockpit with CarPlay voice radar)
 //
 
 import SwiftUI
@@ -13,6 +17,8 @@ public struct ContentView: View {
     @ObservedObject var voiceManager = VoiceManager.shared
     @ObservedObject var voiceCommander = VoiceCommander.shared
     @ObservedObject var storeManager = StoreKitManager.shared
+
+    @State private var selectedTab: Int = 0
     @State private var showingVoiceCommandCheatSheet: Bool = false
     @State private var showingVoiceAuditionSheet: Bool = false
     @State private var showingPaywall: Bool = false
@@ -22,33 +28,37 @@ public struct ContentView: View {
 
     public var body: some View {
         NavigationStack {
-            ZStack {
-                Color(red: 0.06, green: 0.07, blue: 0.09)
-                    .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Automotive Live Header Card
-                        carPlayStatusCard
-
-                        // Active Driving / Audio Player Mirror
-                        if let currentWord = voiceManager.currentWord {
-                            activeWordCard(currentWord)
-                        } else {
-                            startSessionPromptCard
-                        }
-
-                        // Hands-Free Voice Control Radar
-                        voiceRecognitionStatusCard
-
-                        // Curated Curriculum Tiers
-                        curriculumTiersSection
+            TabView(selection: $selectedTab) {
+                // Tab 0: Words (Daily Card)
+                wordsTab
+                    .tabItem {
+                        Label("Words", systemImage: "text.book.closed.fill")
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-                }
+                    .tag(0)
+
+                // Tab 1: Practice (Quiz & Bell Curve)
+                PracticeQuizView()
+                    .tabItem {
+                        Label("Practice", systemImage: "brain.head.profile")
+                    }
+                    .tag(1)
+
+                // Tab 2: Tracks (Curricula)
+                tracksTab
+                    .tabItem {
+                        Label("Tracks", systemImage: "square.grid.2x2.fill")
+                    }
+                    .tag(2)
+
+                // Tab 3: Drive (CarPlay & Voice Radar)
+                driveTab
+                    .tabItem {
+                        Label("Drive Mode", systemImage: "car.fill")
+                    }
+                    .tag(3)
             }
-            .navigationTitle("Orator")
+            .tint(.orange)
+            .navigationTitle(navTitleForTab(selectedTab))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -116,47 +126,229 @@ public struct ContentView: View {
                 }
             }
             .onAppear {
-                // Warm up audio session and pre-request speech permissions
                 if !hasRequestedPermissions {
                     hasRequestedPermissions = true
-                    voiceCommander.requestPermissionsAndStart { granted in
-                        print("[ContentView] Microphone & Speech permissions: \(granted)")
-                    }
+                    voiceCommander.requestPermissionsAndStart { _ in }
                 }
             }
         }
     }
 
-    // MARK: - Subviews
+    private func navTitleForTab(_ tab: Int) -> String {
+        switch tab {
+        case 0: return "Orator"
+        case 1: return "Practice Studio"
+        case 2: return "Curriculum Tracks"
+        case 3: return "CarPlay Cockpit"
+        default: return "Orator"
+        }
+    }
 
-    private var carPlayStatusCard: some View {
-        HStack(spacing: 16) {
-            Image(systemName: "car.fill")
-                .font(.system(size: 28))
-                .foregroundColor(.orange)
+    // MARK: - Tab 0: Words (Daily Card)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("CarPlay Audio Engine Ready")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-                Text("100% Hands-Free • Voice-Controlled")
-                    .font(.system(size: 13, weight: .medium))
+    private var wordsTab: some View {
+        ZStack {
+            Color(red: 0.06, green: 0.07, blue: 0.09).ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    if let currentWord = voiceManager.currentWord {
+                        activeWordCard(currentWord)
+                    } else {
+                        startSessionPromptCard
+                    }
+
+                    // Mini Hands-Free Bar
+                    miniVoiceControlBar
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+            }
+        }
+    }
+
+    private func activeWordCard(_ word: VocabWord) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            // Header Progress & Tier Pills
+            HStack {
+                Text(word.tier.rawValue.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.15))
+                    .cornerRadius(8)
+
+                Text("SET \(word.setNumber) • WORD \(voiceManager.activeIndex + 1) OF \(voiceManager.activeDeck.count)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white.opacity(0.85))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.10))
+                    .cornerRadius(8)
+
+                Spacer()
+
+                Text(word.partOfSpeech.lowercased())
+                    .font(.system(size: 13, weight: .semibold, design: .serif))
+                    .italic()
                     .foregroundColor(.gray)
             }
 
-            Spacer()
+            // Word Title & Phonetic Audio Tap Pill (Screenshot 2 Archetype)
+            VStack(alignment: .center, spacing: 10) {
+                Text(word.word.lowercased())
+                    .font(.system(size: 38, weight: .bold, design: .serif))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
 
-            Circle()
-                .fill(voiceCommander.isListening ? Color.green : Color.orange)
-                .frame(width: 12, height: 12)
+                Button {
+                    voiceManager.speakWordTrack(wordId: word.id, kind: "hook", text: word.spokenAcousticHook) {}
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(word.phonetic)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundColor(.orange)
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.orange.opacity(0.12))
+                    .cornerRadius(12)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.vertical, 6)
+
+            // Definition
+            VStack(alignment: .leading, spacing: 4) {
+                Text("(\(word.partOfSpeech.lowercased().prefix(1)).) \(word.shortDefinition)")
+                    .font(.system(size: 16, weight: .regular, design: .serif))
+                    .foregroundColor(Color(white: 0.95))
+                    .lineSpacing(4)
+            }
+
+            // In Context Box
+            VStack(alignment: .leading, spacing: 6) {
+                Text("IN CONTEXT")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.gray)
+                    .tracking(0.5)
+
+                Text("\"\(word.exampleSentence)\"")
+                    .font(.system(size: 14, weight: .regular))
+                    .italic()
+                    .foregroundColor(Color(white: 0.85))
+                    .lineSpacing(3)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+
+            // Latin / Greek Origin
+            HStack(spacing: 8) {
+                Image(systemName: "text.book.closed.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                Text(word.etymology)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.orange.opacity(0.9))
+                    .lineLimit(2)
+            }
+
+            Divider()
+                .background(Color.white.opacity(0.1))
+
+            // Action Icons Row (Matching Screenshot 2)
+            HStack {
+                Button {
+                    voiceManager.deliverFullExplanation()
+                } label: {
+                    actionIcon(systemName: "info.circle", label: "Explain")
+                }
+
+                Spacer()
+
+                Button {
+                    voiceManager.deliverContextualExample()
+                } label: {
+                    actionIcon(systemName: "quote.bubble", label: "Example")
+                }
+
+                Spacer()
+
+                Button {
+                    voiceManager.markCurrentWordMastered()
+                } label: {
+                    actionIcon(systemName: (word.isMastered ? "heart.fill" : "heart"), label: "Mastered", color: word.isMastered ? .red : .white)
+                }
+
+                Spacer()
+
+                Button {
+                    voiceManager.deliverEtymology()
+                } label: {
+                    actionIcon(systemName: "sparkles", label: "Root")
+                }
+            }
+            .padding(.top, 2)
+
+            // Next / Previous Navigation Controls
+            HStack(spacing: 12) {
+                Button {
+                    voiceManager.advanceWord(by: -1)
+                } label: {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                        Text("Previous")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(10)
+                }
+
+                Button {
+                    voiceManager.advanceWord(by: 1)
+                } label: {
+                    HStack {
+                        Text("Next Word")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.orange)
+                    .cornerRadius(10)
+                }
+            }
         }
-        .padding(16)
+        .padding(22)
         .background(Color(white: 0.12))
-        .cornerRadius(16)
+        .cornerRadius(24)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 24)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    private func actionIcon(systemName: String, label: String, color: Color = .white) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: systemName)
+                .font(.system(size: 18))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.gray)
+        }
+        .frame(minWidth: 48)
     }
 
     private var startSessionPromptCard: some View {
@@ -166,7 +358,7 @@ public struct ContentView: View {
                 .foregroundColor(.orange)
 
             Text("Begin Today's Commute Deck")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 20, weight: .bold, design: .serif))
                 .foregroundColor(.white)
 
             Text("Tap to start listening, or connect to your car's CarPlay screen. Control everything hands-free with your voice.")
@@ -194,100 +386,138 @@ public struct ContentView: View {
         .cornerRadius(20)
     }
 
-    private func activeWordCard(_ word: VocabWord) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(word.tier.rawValue.uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.orange)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color.orange.opacity(0.15))
-                    .cornerRadius(8)
+    private var miniVoiceControlBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "mic.fill")
+                .font(.system(size: 16))
+                .foregroundColor(voiceCommander.isListening ? .green : .gray)
 
-                Text("SET \(word.setNumber) OF 60")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(8)
+            Text(voiceCommander.recognizedTranscription.isEmpty ? "Voice radar active: say 'Next', 'Repeat', or 'Explain'" : "\"\(voiceCommander.recognizedTranscription)\"")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.gray)
+                .lineLimit(1)
 
-                Spacer()
+            Spacer()
 
-                Text(word.partOfSpeech)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.gray)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(word.word)
-                    .font(.system(size: 34, weight: .heavy, design: .serif))
-                    .foregroundColor(.white)
-
-                Text(word.phonetic)
-                    .font(.system(size: 16, weight: .medium, design: .monospaced))
-                    .foregroundColor(.orange.opacity(0.9))
-            }
-
-            Text(word.shortDefinition)
-                .font(.system(size: 16, weight: .regular))
-                .foregroundColor(Color(white: 0.9))
-                .lineSpacing(4)
-
-            Divider()
-                .background(Color.white.opacity(0.1))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("EXAMPLE IN CONTEXT")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.gray)
-                Text("\"\(word.exampleSentence)\"")
-                    .font(.system(size: 14, weight: .regular))
-                    .italic()
-                    .foregroundColor(Color(white: 0.8))
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ROOT FAMILY")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.gray)
-                Text(word.rootFamily)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.orange)
-            }
-
-            // Driver Status Mode Banner & Manual Audio Tap
             Button {
-                voiceManager.speakWordTrack(wordId: word.id, kind: "hook", text: word.spokenAcousticHook) {}
+                selectedTab = 3
             } label: {
-                HStack {
-                    Image(systemName: voiceManager.isPlaying ? "speaker.wave.3.fill" : "speaker.wave.2.fill")
-                        .foregroundColor(.orange)
-                    Text(voiceManager.playbackModeDescription)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text("Tap to Speak")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.orange)
-                }
-                .padding(12)
-                .background(Color.black.opacity(0.4))
-                .cornerRadius(10)
+                Text("Drive Cockpit")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.orange)
             }
         }
-        .padding(20)
+        .padding(14)
+        .background(Color(white: 0.10))
+        .cornerRadius(14)
+    }
+
+    // MARK: - Tab 2: Tracks (Curricula)
+
+    private var tracksTab: some View {
+        ZStack {
+            Color(red: 0.06, green: 0.07, blue: 0.09).ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Select a specialized collegiate curriculum to begin hands-free spoken study:")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+
+                    ForEach(VocabTier.allCases) { tier in
+                        Button {
+                            let words = CurriculumData.words.filter { $0.tier == tier }
+                            voiceCommander.requestPermissionsAndStart { _ in
+                                voiceManager.startDeck(words, startingAt: 0)
+                                selectedTab = 0
+                            }
+                        } label: {
+                            HStack(spacing: 16) {
+                                Image(systemName: tier.iconName)
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.orange)
+                                    .frame(width: 32)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(tier.rawValue)
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.white)
+                                    Text(storeManager.isUnlocked ? "\(CurriculumData.wordsForTier(tier).count) words • 15 Sets (Unlocked)" : "Set 1 Free • 15 Sets Total")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(storeManager.isUnlocked ? .green.opacity(0.85) : .yellow.opacity(0.85))
+                                    Text(tier.subtitle)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.gray)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer()
+
+                                if !storeManager.isUnlocked {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.yellow.opacity(0.8))
+                                }
+
+                                Image(systemName: "play.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.orange)
+                            }
+                            .padding(16)
+                            .background(Color(white: 0.12))
+                            .cornerRadius(14)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+        }
+    }
+
+    // MARK: - Tab 3: Drive Mode (CarPlay & Cockpit)
+
+    private var driveTab: some View {
+        ZStack {
+            Color(red: 0.06, green: 0.07, blue: 0.09).ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    carPlayStatusCard
+                    voiceRecognitionStatusCard
+                }
+                .padding(20)
+            }
+        }
+    }
+
+    private var carPlayStatusCard: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "car.fill")
+                .font(.system(size: 28))
+                .foregroundColor(.orange)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("CarPlay Audio Engine Ready")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                Text("100% Hands-Free • Voice-Controlled")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.gray)
+            }
+
+            Spacer()
+
+            Circle()
+                .fill(voiceCommander.isListening ? Color.green : Color.orange)
+                .frame(width: 12, height: 12)
+        }
+        .padding(16)
         .background(Color(white: 0.12))
-        .cornerRadius(20)
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.orange.opacity(0.3), lineWidth: 1.5)
-        )
+        .cornerRadius(16)
     }
 
     private var voiceRecognitionStatusCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Image(systemName: "waveform")
                     .font(.system(size: 18, weight: .bold))
@@ -316,11 +546,14 @@ public struct ContentView: View {
                     .italic()
             } else {
                 Text("\"\(voiceCommander.recognizedTranscription)\"")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.white)
             }
 
-            // Quick Voice Action Triggers
+            Text("Quick Voice Simulator:")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.gray)
+
             HStack(spacing: 8) {
                 voiceTestPill("Next", cmd: .next)
                 voiceTestPill("Repeat", cmd: .repeatWord)
@@ -329,8 +562,8 @@ public struct ContentView: View {
                 voiceTestPill("Root", cmd: .root)
             }
         }
-        .padding(16)
-        .background(Color(white: 0.10))
+        .padding(18)
+        .background(Color(white: 0.11))
         .cornerRadius(16)
     }
 
@@ -345,58 +578,6 @@ public struct ContentView: View {
                 .padding(.vertical, 6)
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(8)
-        }
-    }
-
-    private var curriculumTiersSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("VOCABULARY TRACKS")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.gray)
-
-            ForEach(VocabTier.allCases) { tier in
-                Button {
-                    let words = CurriculumData.words.filter { $0.tier == tier }
-                    voiceCommander.requestPermissionsAndStart { _ in
-                        voiceManager.startDeck(words, startingAt: 0)
-                    }
-                } label: {
-                    HStack(spacing: 16) {
-                        Image(systemName: tier.iconName)
-                            .font(.system(size: 22))
-                            .foregroundColor(.orange)
-                            .frame(width: 32)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(tier.rawValue)
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                            Text(storeManager.isUnlocked ? "\(CurriculumData.wordsForTier(tier).count) words • 15 Sets (Unlocked)" : "Set 1 Free • 15 Sets Total")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(storeManager.isUnlocked ? .green.opacity(0.85) : .yellow.opacity(0.85))
-                            Text(tier.subtitle)
-                                .font(.system(size: 11))
-                                .foregroundColor(.gray)
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-
-                        if !storeManager.isUnlocked {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(.yellow.opacity(0.8))
-                        }
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.gray)
-                    }
-                    .padding(16)
-                    .background(Color(white: 0.12))
-                    .cornerRadius(14)
-                }
-            }
         }
     }
 
