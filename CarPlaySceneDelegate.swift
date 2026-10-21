@@ -34,6 +34,14 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
         VoiceCommander.shared.stopListening()
     }
 
+    public func sceneDidBecomeActive(_ scene: UIScene) {
+        print("[CarPlay] sceneDidBecomeActive: ensuring audio session and continuous voice listening are active")
+        VoiceManager.shared.configureAudioSessionIfNeeded()
+        if !VoiceManager.shared.isPlaying {
+            VoiceCommander.shared.startContinuousListening()
+        }
+    }
+
     // MARK: - Template Architecture
 
     private func buildTabBarTemplate() -> CPTabBarTemplate {

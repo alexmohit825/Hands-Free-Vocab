@@ -38,6 +38,29 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     public var recallWindowSeconds: Double = 3.5
     private var recallTimer: Timer?
 
+    // MARK: - Hands-Free Knowledge Check State
+    @Published public var isQuizMode: Bool = false
+    @Published public var quizExpectedWord: VocabWord?
+    @Published public var quizQuestionIndex: Int = 0
+    @Published public var quizTotalCount: Int = 3
+    @Published public var quizScore: Int = 0
+    @Published public var quizStatusMessage: String = ""
+    @Published public var enableHandsFreeKnowledgeCheck: Bool = {
+        if UserDefaults.standard.object(forKey: "enable_hands_free_quiz") == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: "enable_hands_free_quiz")
+    }() {
+        didSet {
+            UserDefaults.standard.set(enableHandsFreeKnowledgeCheck, forKey: "enable_hands_free_quiz")
+        }
+    }
+
+    private var quizQuestions: [VocabWord] = []
+    private var pendingPostQuizAction: (() -> Void)?
+    private var quizTimer: Timer?
+    private var isEvaluatingAnswer: Bool = false
+
     private override init() {
         super.init()
         let best = AudioCache.pickBestVoice()
@@ -191,9 +214,18 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
 
             switch command {
             case .next:
-                self.advanceWord(by: 1)
+                if self.isQuizMode {
+                    self.skipHandsFreeKnowledgeCheck()
+                } else {
+                    self.advanceWord(by: 1)
+                }
             case .repeatWord:
-                if let word = self.currentWord {
+                if self.isQuizMode {
+                    if let word = self.quizExpectedWord {
+                        let prompt = "What word means: \(word.shortDefinition)?"
+                        self.speakText(prompt) {}
+                    }
+                } else if let word = self.currentWord {
                     self.presentWord(word)
                 }
             case .mastered:
@@ -209,12 +241,15 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
                 self.pauseStudySession()
             case .resume:
                 self.resumeStudySession()
+            case .quiz:
+                self.triggerManualKnowledgeCheck()
             }
         }
     }
 
     public func advanceWord(by offset: Int) {
         recallTimer?.invalidate()
+        quizTimer?.invalidate()
         player?.stop()
         directSynthesizer?.stopSpeaking(at: .immediate)
 
@@ -226,7 +261,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
 
             if previousSet != nextSet {
                 activeIndex = nextIndex
-                announceSetTransition(completedSet: previousSet, nextSet: nextSet)
+                triggerSetCompletionKnowledgeCheck(completedSet: previousSet, nextSet: nextSet, isFullDeckProgression: false)
             } else {
                 activeIndex = nextIndex
                 presentWord(activeDeck[activeIndex])
@@ -236,8 +271,227 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
             let totalSets = CurriculumData.totalSetsCount
             let nextSet = (currentSet >= totalSets) ? 1 : currentSet + 1
 
-            announceSetTransition(completedSet: currentSet, nextSet: nextSet, isFullDeckProgression: true)
+            triggerSetCompletionKnowledgeCheck(completedSet: currentSet, nextSet: nextSet, isFullDeckProgression: true)
         }
+    }
+
+    // MARK: - Hands-Free Knowledge Check (Automotive Spoken Recall Engine)
+
+    public func triggerSetCompletionKnowledgeCheck(completedSet: Int, nextSet: Int, isFullDeckProgression: Bool = false) {
+        guard enableHandsFreeKnowledgeCheck else {
+            announceSetTransition(completedSet: completedSet, nextSet: nextSet, isFullDeckProgression: isFullDeckProgression)
+            return
+        }
+
+        let wordsInSet = CurriculumData.wordsForSet(completedSet)
+        let candidates = wordsInSet.isEmpty ? Array(activeDeck.prefix(3)) : wordsInSet
+        let selected = Array(candidates.shuffled().prefix(3))
+
+        let intro = "Set \(completedSet) complete! Time for a quick hands-free knowledge check. I will read \(selected.count) definitions. Say the word aloud, or say 'Tell me' if you need the answer."
+
+        startHandsFreeKnowledgeCheck(questions: selected, introAnnouncement: intro) { [weak self] in
+            self?.announceSetTransition(completedSet: completedSet, nextSet: nextSet, isFullDeckProgression: isFullDeckProgression)
+        }
+    }
+
+    public func triggerManualKnowledgeCheck() {
+        let candidates = activeDeck.isEmpty ? CurriculumData.wordsForSet(1) : activeDeck
+        let selected = Array(candidates.shuffled().prefix(3))
+        let intro = "Starting a quick hands-free knowledge check. I will read \(selected.count) definitions. Say the word aloud, or say 'Tell me' if you need the answer."
+
+        startHandsFreeKnowledgeCheck(questions: selected, introAnnouncement: intro) { [weak self] in
+            guard let self = self else { return }
+            if let word = self.currentWord {
+                self.presentWord(word)
+            }
+        }
+    }
+
+    public func startHandsFreeKnowledgeCheck(questions: [VocabWord], introAnnouncement: String, onComplete: @escaping () -> Void) {
+        guard !questions.isEmpty else {
+            onComplete()
+            return
+        }
+
+        recallTimer?.invalidate()
+        quizTimer?.invalidate()
+        player?.stop()
+        directSynthesizer?.stopSpeaking(at: .immediate)
+
+        self.quizQuestions = questions
+        self.quizTotalCount = questions.count
+        self.quizQuestionIndex = 0
+        self.quizScore = 0
+        self.isQuizMode = true
+        self.isEvaluatingAnswer = false
+        self.pendingPostQuizAction = onComplete
+        self.quizStatusMessage = "Knowledge Check Active"
+        self.playbackModeDescription = "Hands-Free Knowledge Check"
+
+        updateNowPlayingForQuiz(title: "Hands-Free Knowledge Check", detail: "Listen for definition...")
+
+        speakText(introAnnouncement) { [weak self] in
+            guard let self = self, self.isQuizMode else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                self?.presentNextQuizQuestion()
+            }
+        }
+    }
+
+    private func presentNextQuizQuestion() {
+        guard isQuizMode else { return }
+        quizTimer?.invalidate()
+
+        if quizQuestionIndex >= quizQuestions.count {
+            finishHandsFreeKnowledgeCheck()
+            return
+        }
+
+        let word = quizQuestions[quizQuestionIndex]
+        self.quizExpectedWord = word
+        self.isEvaluatingAnswer = false
+        let qNum = quizQuestionIndex + 1
+
+        let prompt = "Question \(qNum) of \(quizTotalCount): What word means: \(word.shortDefinition)?"
+        self.playbackModeDescription = "Quiz \(qNum)/\(quizTotalCount): \"\(word.shortDefinition)\""
+        self.quizStatusMessage = "Q\(qNum)/\(quizTotalCount): What word means: \(word.shortDefinition)?"
+        updateNowPlayingForQuiz(title: "Question \(qNum) of \(quizTotalCount)", detail: "What means: \(word.shortDefinition)?")
+
+        speakText(prompt) { [weak self] in
+            guard let self = self, self.isQuizMode else { return }
+            print("[VoiceManager] 🎯 Quiz question spoken. Starting 8.5s listening window for driver response...")
+            self.playbackModeDescription = "Listening for: \"\(word.word)\" or \"Tell me\"..."
+            self.quizTimer?.invalidate()
+            self.quizTimer = Timer.scheduledTimer(withTimeInterval: 8.5, repeats: false) { [weak self] _ in
+                self?.handleQuizAnswer(isUserCorrect: false, userGaveUp: false, isTimeout: true)
+            }
+        }
+    }
+
+    public func evaluateQuizUtterance(_ utterance: String) -> Bool {
+        guard isQuizMode, let word = quizExpectedWord, !isEvaluatingAnswer else { return false }
+        let target = word.word.lowercased()
+
+        if utterance.contains("skip quiz") || utterance.contains("skip test") || utterance.contains("stop quiz") || utterance.contains("exit quiz") || utterance.contains("cancel quiz") {
+            isEvaluatingAnswer = true
+            quizTimer?.invalidate()
+            skipHandsFreeKnowledgeCheck()
+            return true
+        }
+
+        if utterance.contains("tell me") || utterance.contains("answer") || utterance.contains("don't know") || utterance.contains("dont know") || utterance.contains("pass") || utterance.contains("give up") {
+            isEvaluatingAnswer = true
+            quizTimer?.invalidate()
+            handleQuizAnswer(isUserCorrect: false, userGaveUp: true)
+            return true
+        }
+
+        if utterance.contains(target) {
+            isEvaluatingAnswer = true
+            quizTimer?.invalidate()
+            handleQuizAnswer(isUserCorrect: true, userGaveUp: false)
+            return true
+        }
+
+        return false
+    }
+
+    public func handleQuizAnswer(isUserCorrect: Bool, userGaveUp: Bool, isTimeout: Bool = false) {
+        guard isQuizMode, let word = quizExpectedWord else { return }
+        quizTimer?.invalidate()
+        quizTimer = nil
+        isEvaluatingAnswer = true
+
+        let feedbackText: String
+        let nowPlayingStatus: String
+
+        if isUserCorrect {
+            quizScore += 1
+            feedbackText = "Correct! \(word.word). \(word.exampleSentence)"
+            nowPlayingStatus = "Correct: \(word.word)"
+            self.quizStatusMessage = "✅ Correct! \(word.word)"
+        } else if userGaveUp {
+            feedbackText = "The answer is \(word.word). \(word.shortDefinition). Here is an example: \(word.exampleSentence)"
+            nowPlayingStatus = "Answer: \(word.word)"
+            self.quizStatusMessage = "💡 The answer is \(word.word)"
+        } else {
+            feedbackText = "Time's up. The word is \(word.word). \(word.shortDefinition)."
+            nowPlayingStatus = "Time's up: \(word.word)"
+            self.quizStatusMessage = "⏱️ Time's up: \(word.word)"
+        }
+
+        self.playbackModeDescription = feedbackText
+        updateNowPlayingForQuiz(title: nowPlayingStatus, detail: word.shortDefinition)
+
+        speakText(feedbackText) { [weak self] in
+            guard let self = self, self.isQuizMode else { return }
+            self.quizQuestionIndex += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.presentNextQuizQuestion()
+            }
+        }
+    }
+
+    public func finishHandsFreeKnowledgeCheck() {
+        quizTimer?.invalidate()
+        quizTimer = nil
+        let finalScore = quizScore
+        let total = quizTotalCount
+        isQuizMode = false
+        quizExpectedWord = nil
+        isEvaluatingAnswer = false
+
+        let summary = "Knowledge check complete! You scored \(finalScore) out of \(total)."
+        self.playbackModeDescription = summary
+        self.quizStatusMessage = summary
+        updateNowPlayingForQuiz(title: "Knowledge Check Complete", detail: "Score: \(finalScore)/\(total)")
+
+        speakText(summary) { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                let transition = self?.pendingPostQuizAction
+                self?.pendingPostQuizAction = nil
+                transition?()
+            }
+        }
+    }
+
+    public func skipHandsFreeKnowledgeCheck() {
+        quizTimer?.invalidate()
+        quizTimer = nil
+        isQuizMode = false
+        quizExpectedWord = nil
+        isEvaluatingAnswer = false
+        self.playbackModeDescription = "Knowledge check skipped."
+        self.quizStatusMessage = "Quiz Skipped"
+
+        speakText("Skipping knowledge check.") { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                let transition = self?.pendingPostQuizAction
+                self?.pendingPostQuizAction = nil
+                transition?()
+            }
+        }
+    }
+
+    private func updateNowPlayingForQuiz(title: String, detail: String) {
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: title.uppercased(),
+            MPMediaItemPropertyArtist: detail,
+            MPMediaItemPropertyAlbumTitle: "Orator [Knowledge Check]",
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
+            MPMediaItemPropertyPlaybackDuration: 15.0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: 0.0
+        ]
+
+        if let img = UIImage(named: "AppIcon") {
+            let artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+            info[MPMediaItemPropertyArtwork] = artwork
+        }
+
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     private func announceSetTransition(completedSet: Int, nextSet: Int, isFullDeckProgression: Bool = false) {
@@ -290,6 +544,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
 
     public func pauseStudySession() {
         recallTimer?.invalidate()
+        quizTimer?.invalidate()
         player?.pause()
         directSynthesizer?.pauseSpeaking(at: .immediate)
         isPlaying = false
@@ -307,6 +562,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
             synth.continueSpeaking()
             isPlaying = true
             republishNowPlayingRate()
+        } else if isQuizMode {
+            presentNextQuizQuestion()
         } else if let word = currentWord {
             presentWord(word)
         }

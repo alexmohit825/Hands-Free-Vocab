@@ -19,6 +19,7 @@ public enum VocabCommand: String {
     case pause = "PAUSE"
     case resume = "RESUME"
     case mastered = "MASTERED"
+    case quiz = "QUIZ"
 }
 
 public protocol VoiceCommandDelegate: AnyObject {
@@ -162,6 +163,17 @@ public final class VoiceCommander: NSObject, ObservableObject {
         guard now.timeIntervalSince(lastCommandTimestamp) > debounceInterval else { return }
 
         let normalized = utterance.lowercased()
+
+        // 1. Hands-Free Knowledge Check Intercept (when active)
+        if VoiceManager.shared.isQuizMode {
+            if VoiceManager.shared.evaluateQuizUtterance(normalized) {
+                lastCommandTimestamp = now
+                recognitionRequest?.endAudio()
+                restartListening()
+                return
+            }
+        }
+
         var detected: VocabCommand? = nil
 
         if normalized.contains("next") || normalized.contains("skip") || normalized.contains("forward") {
@@ -180,6 +192,8 @@ public final class VoiceCommander: NSObject, ObservableObject {
             detected = .pause
         } else if normalized.contains("resume") || normalized.contains("play") || normalized.contains("continue") {
             detected = .resume
+        } else if normalized.contains("quiz") || normalized.contains("test me") || normalized.contains("knowledge check") {
+            detected = .quiz
         }
 
         if let command = detected {

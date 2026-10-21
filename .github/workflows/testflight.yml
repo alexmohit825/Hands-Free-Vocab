@@ -53,21 +53,41 @@ jobs:
             --apiKey 38F6WA87DU \
             --apiIssuer 73c7355a-beef-4d79-919d-c3d7dec7747a
 
-      - name: 🚀 Archive Release Candidate for App Store
+      - name: 🚀 Compile, Embed CarPlay Entitlements & Export to TestFlight
         run: |
-          mkdir -p build/archive
+          mkdir -p build/archive build/output
           xcodebuild archive \
             -project HandsFreeVocab.xcodeproj \
             -scheme HandsFreeVocab \
             -destination 'generic/platform=iOS' \
+            -sdk iphoneos \
             -configuration Release \
             -archivePath build/archive/HandsFreeVocab.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
 
-      - name: 📤 Export & Deliver to App Store Connect via Apple Direct Upload
-        run: |
-          mkdir -p build/output
+          echo "🔐 Embedding HandsFreeVocab.entitlements (CarPlay Audio + CarPlay Voice Based Conversation) into Archive Binary..."
+          cat > build/archive_entitlements.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>application-identifier</key>
+              <string>523MJL63MC.com.Alex.HandsFreeVocab</string>
+              <key>com.apple.developer.team-identifier</key>
+              <string>523MJL63MC</string>
+              <key>com.apple.developer.carplay-audio</key>
+              <true/>
+              <key>com.apple.developer.carplay-voice-based-conversation</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+          codesign --force --sign - --entitlements build/archive_entitlements.plist build/archive/HandsFreeVocab.xcarchive/Products/Applications/HandsFreeVocab.app
+          echo "🔎 Verifying Embedded Archive Entitlements:"
+          codesign -d --entitlements :- build/archive/HandsFreeVocab.xcarchive/Products/Applications/HandsFreeVocab.app
+
           xcodebuild -exportArchive \
             -archivePath build/archive/HandsFreeVocab.xcarchive \
             -exportOptionsPlist ExportOptions.plist \
@@ -76,4 +96,4 @@ jobs:
             -authenticationKeyID 38F6WA87DU \
             -authenticationKeyIssuerID 73c7355a-beef-4d79-919d-c3d7dec7747a \
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_38F6WA87DU.p8
-          echo "✓ Native xcodebuild direct upload to TestFlight completed!"
+          echo "✓ Native xcodebuild direct upload to TestFlight completed with CarPlay entitlements!"

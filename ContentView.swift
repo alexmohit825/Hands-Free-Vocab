@@ -152,6 +152,9 @@ public struct ContentView: View {
 
             ScrollView {
                 VStack(spacing: 20) {
+                    if voiceManager.isQuizMode {
+                        handsFreeQuizCard
+                    }
                     if let currentWord = voiceManager.currentWord {
                         activeWordCard(currentWord)
                     } else {
@@ -483,11 +486,142 @@ public struct ContentView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     carPlayStatusCard
+                    handsFreeQuizCard
+                    knowledgeCheckSettingsCard
                     voiceRecognitionStatusCard
                 }
                 .padding(20)
             }
         }
+    }
+
+    @ViewBuilder
+    private var handsFreeQuizCard: some View {
+        if voiceManager.isQuizMode, let word = voiceManager.quizExpectedWord {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.orange)
+                    Text("HANDS-FREE KNOWLEDGE CHECK")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.orange)
+
+                    Spacer()
+
+                    Text("Q\(voiceManager.quizQuestionIndex + 1)/\(voiceManager.quizTotalCount) • Score: \(voiceManager.quizScore)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange)
+                        .cornerRadius(6)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Definition:")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.gray)
+                    Text("\"\(word.shortDefinition)\"")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.white)
+                }
+
+                Text(voiceManager.quizStatusMessage.isEmpty ? "Say the word aloud, or say \"Tell me\"" : voiceManager.quizStatusMessage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.yellow)
+
+                HStack(spacing: 8) {
+                    Button {
+                        voiceManager.handleQuizAnswer(isUserCorrect: true, userGaveUp: false)
+                    } label: {
+                        Text("Simulate: \"\(word.word)\"")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.green)
+                            .cornerRadius(8)
+                    }
+
+                    Button {
+                        voiceManager.handleQuizAnswer(isUserCorrect: false, userGaveUp: true)
+                    } label: {
+                        Text("Simulate: \"Tell Me\"")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.15))
+                            .cornerRadius(8)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        voiceManager.skipHandsFreeKnowledgeCheck()
+                    } label: {
+                        Text("Skip")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.gray)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.08))
+                            .cornerRadius(8)
+                    }
+                }
+            }
+            .padding(18)
+            .background(Color(red: 0.12, green: 0.10, blue: 0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.orange.opacity(0.6), lineWidth: 1.5)
+            )
+            .cornerRadius(16)
+        }
+    }
+
+    private var knowledgeCheckSettingsCard: some View {
+        VStack(spacing: 12) {
+            Toggle(isOn: $voiceManager.enableHandsFreeKnowledgeCheck) {
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hands-Free Set Knowledge Check")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text("Spoken 3-question recall quiz after completing every 30 words")
+                            .font(.system(size: 11))
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            .toggleStyle(SwitchToggleStyle(tint: .orange))
+
+            if !voiceManager.isQuizMode {
+                Button {
+                    voiceManager.triggerManualKnowledgeCheck()
+                } label: {
+                    HStack {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 11))
+                        Text("Start Knowledge Check Now (3 Words)")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.orange)
+                    .cornerRadius(10)
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(16)
+        .background(Color(white: 0.12))
+        .cornerRadius(16)
     }
 
     private var carPlayStatusCard: some View {
@@ -558,6 +692,7 @@ public struct ContentView: View {
                 voiceTestPill("Next", cmd: .next)
                 voiceTestPill("Repeat", cmd: .repeatWord)
                 voiceTestPill("Mastered", cmd: .mastered)
+                voiceTestPill("Quiz", cmd: .quiz)
                 voiceTestPill("Explain", cmd: .explain)
                 voiceTestPill("Root", cmd: .root)
             }
@@ -594,6 +729,9 @@ public struct ContentView: View {
                         commandGuideRow("Next / Skip / Forward", description: "Advances immediately to the next vocabulary word.")
                         commandGuideRow("Repeat / Again / Say Again", description: "Re-plays the acoustic phonetic hook of the current word.")
                         commandGuideRow("Mastered / Got It / Easy", description: "Flags word as mastered, increments SRS interval, and advances.")
+                        commandGuideRow("Quiz / Test / Knowledge Check", description: "Triggers a quick 3-question spoken recall test on recent words.")
+                        commandGuideRow("Tell Me / Answer / Pass", description: "Hands-free reveal: Orator speaks the answer and example sentence if you cannot recall the word.")
+                        commandGuideRow("Skip Quiz / Exit Quiz", description: "Bypasses the current knowledge check and returns immediately to normal drive mode.")
                         commandGuideRow("Explain / Detail / Elaborate", description: "Spoken narration of the full comprehensive definition.")
                         commandGuideRow("Example / Sentence / Context", description: "Speaks the real-world usage and contextual sentence.")
                         commandGuideRow("Root / Origin / Etymology", description: "Narrates Latin/Greek roots and morphological word family.")
