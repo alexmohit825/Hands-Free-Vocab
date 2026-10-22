@@ -20,6 +20,9 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
     ) {
         print("[CarPlay] Connected interface controller to vehicle.")
         self.interfaceController = interfaceController
+        VoiceManager.shared.isCarPlayConnected = true
+        VoiceCommander.shared.stopListening()
+        VoiceManager.shared.configureAudioSessionIfNeeded(forcePlaybackCategory: true)
 
         let tabTemplate = buildTabBarTemplate()
         interfaceController.setRootTemplate(tabTemplate, animated: false, completion: nil)
@@ -31,15 +34,15 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
     ) {
         print("[CarPlay] Disconnected from vehicle.")
         self.interfaceController = nil
+        VoiceManager.shared.isCarPlayConnected = false
         VoiceCommander.shared.stopListening()
     }
 
     public func sceneDidBecomeActive(_ scene: UIScene) {
-        print("[CarPlay] sceneDidBecomeActive: ensuring audio session and continuous voice listening are active")
-        VoiceManager.shared.configureAudioSessionIfNeeded()
-        if !VoiceManager.shared.isPlaying {
-            VoiceCommander.shared.startContinuousListening()
-        }
+        print("[CarPlay] sceneDidBecomeActive: ensuring .playback audio session active without mic conflicts")
+        VoiceManager.shared.isCarPlayConnected = true
+        VoiceCommander.shared.stopListening()
+        VoiceManager.shared.configureAudioSessionIfNeeded(forcePlaybackCategory: true)
     }
 
     // MARK: - Template Architecture

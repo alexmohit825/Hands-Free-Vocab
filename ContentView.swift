@@ -12,8 +12,10 @@
 import SwiftUI
 import Speech
 import AVFoundation
+import StoreKit
 
 public struct ContentView: View {
+    @Environment(\.requestReview) private var requestReview
     @ObservedObject var voiceManager = VoiceManager.shared
     @ObservedObject var voiceCommander = VoiceCommander.shared
     @ObservedObject var storeManager = StoreKitManager.shared
@@ -125,6 +127,10 @@ public struct ContentView: View {
                     voiceManager.shouldShowPaywall = false
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .oratorMilestoneReached)) { _ in
+                // Milestone rating hook: triggers un-gated review when completing study sets or quizzes
+                requestReview()
+            }
             .onAppear {
                 if !hasRequestedPermissions {
                     hasRequestedPermissions = true
@@ -163,6 +169,9 @@ public struct ContentView: View {
 
                     // Mini Hands-Free Bar
                     miniVoiceControlBar
+
+                    // Persistent App Store Rating Banner Card (Guideline 5.6.1)
+                    appRatingBannerCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -489,6 +498,7 @@ public struct ContentView: View {
                     handsFreeQuizCard
                     knowledgeCheckSettingsCard
                     voiceRecognitionStatusCard
+                    appRatingBannerCard
                 }
                 .padding(20)
             }
@@ -760,5 +770,52 @@ public struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.06))
         .cornerRadius(12)
+    }
+
+    // MARK: - App Store Rating & Review Banner (Guideline 5.6.1 Compliant)
+
+    private var appRatingBannerCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                HStack(spacing: 3) {
+                    ForEach(0..<5) { _ in
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 11))
+                    }
+                }
+                Text("ENJOYING ORATOR?")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundColor(.yellow)
+                Spacer()
+            }
+
+            Text("Your 5-star rating supports continuous automotive vocabulary expansion and offline voice features.")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundColor(.gray)
+                .lineSpacing(2)
+
+            Button(action: {
+                requestReview()
+            }) {
+                HStack {
+                    Image(systemName: "star.leadinghalf.filled")
+                    Text("Rate Orator on the App Store")
+                }
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(Color.yellow)
+                .cornerRadius(10)
+            }
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.yellow.opacity(0.25), lineWidth: 1)
+        )
     }
 }

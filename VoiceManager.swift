@@ -61,6 +61,9 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     private var quizTimer: Timer?
     private var isEvaluatingAnswer: Bool = false
 
+    @Published public var isCarPlayConnected: Bool = false
+    private var didWireRemoteCommands: Bool = false
+
     private override init() {
         super.init()
         let best = AudioCache.pickBestVoice()
@@ -74,6 +77,7 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         }
         self.activeDeck = CurriculumData.words
         VoiceCommander.shared.delegate = self
+        wireRemoteCommandCenter()
         observeInterruptions()
         observeAppLifecycle()
     }
@@ -89,18 +93,59 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     private var directSynthesizer: AVSpeechSynthesizer?
     private var isUsingDirectSpeech: Bool = false
 
-    // MARK: - Audio Session Priority
+    // MARK: - Audio Session Priority & Remote Controls
 
-    public func configureAudioSessionIfNeeded() {
+    public func configureAudioSessionIfNeeded(forcePlaybackCategory: Bool = false) {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord,
+            // Using .playback with .allowBluetoothA2DP / .allowAirPlay guarantees crystal clear
+            // CarPlay and vehicle audio delivery matching Apple Music and Podcasts (Zero mic route collision).
+            try session.setCategory(.playback,
                                     mode: .spokenAudio,
-                                    options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .allowAirPlay])
+                                    options: [.allowBluetoothA2DP, .allowAirPlay])
             try session.setActive(true, options: [])
-            print("[VoiceManager] Audio session active with .playAndRecord / .spokenAudio")
+            print("[VoiceManager] Audio session active with .playback / .spokenAudio")
         } catch {
             print("[VoiceManager] Audio session setCategory error: \(error)")
+        }
+    }
+
+    private func wireRemoteCommandCenter() {
+        guard !didWireRemoteCommands else { return }
+        didWireRemoteCommands = true
+
+        UIApplication.shared.beginReceivingRemoteControlEvents()
+
+        let rcc = MPRemoteCommandCenter.shared()
+        rcc.playCommand.isEnabled = true
+        rcc.pauseCommand.isEnabled = true
+        rcc.nextTrackCommand.isEnabled = true
+        rcc.previousTrackCommand.isEnabled = true
+
+        rcc.playCommand.addTarget { [weak self] _ in
+            self?.resumeStudySession()
+            return .success
+        }
+        rcc.pauseCommand.addTarget { [weak self] _ in
+            self?.pauseStudySession()
+            return .success
+        }
+        rcc.nextTrackCommand.addTarget { [weak self] _ in
+            self?.advanceWord(by: 1)
+            return .success
+        }
+        rcc.previousTrackCommand.addTarget { [weak self] _ in
+            guard let self = self else { return .commandFailed }
+            if self.isQuizMode {
+                if let word = self.quizExpectedWord {
+                    self.speakText("What word means: \(word.shortDefinition)?") {}
+                }
+            } else if self.activeIndex > 0 {
+                self.advanceWord(by: -1)
+            } else if let word = self.currentWord {
+                self.presentWord(word)
+            }
+            return .success
         }
     }
 
@@ -446,6 +491,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         self.quizStatusMessage = summary
         updateNowPlayingForQuiz(title: "Knowledge Check Complete", detail: "Score: \(finalScore)/\(total)")
 
+        NotificationCenter.default.post(name: .oratorMilestoneReached, object: nil)
+
         speakText(summary) { [weak self] in
             guard let self = self else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
@@ -512,6 +559,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         let announcement = "Set \(completedSet) complete. Moving to Set \(nextSet)."
         self.playbackModeDescription = "Transitioning to Set \(nextSet)..."
         let trackId = (completedSet == 1 && nextSet == 2) ? "set1_complete_next" : nil
+
+        NotificationCenter.default.post(name: .oratorMilestoneReached, object: nil)
 
         speakWordTrack(wordId: trackId, kind: nil, text: announcement) { [weak self] in
             guard let self = self else { return }
@@ -582,7 +631,10 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         directSynthesizer?.stopSpeaking(at: .immediate)
 
         self.completionHandler = { [weak self] in
-            VoiceCommander.shared.startContinuousListening()
+            guard let self = self else { return }
+            if !self.isCarPlayConnected {
+                VoiceCommander.shared.startContinuousListening()
+            }
             completion()
         }
 
@@ -688,4 +740,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player?.currentTime ?? 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
+}
+
+extension Notification.Name {
+    public static let oratorMilestoneReached = Notification.Name("oratorMilestoneReached")
 }
