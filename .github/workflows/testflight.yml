@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      deploy_to_testflight:
+        description: 'Upload compiled archive to App Store Connect TestFlight'
+        required: false
+        default: 'true'
 
 concurrency:
   group: testflight-${{ github.ref }}
@@ -11,7 +16,7 @@ concurrency:
 
 jobs:
   build-and-deliver:
-    name: 🍏 Compile, Archive & Deliver to App Store Connect
+    name: 🍏 Compile, Archive & Verify CarPlay Entitlements
     runs-on: macos-15
     timeout-minutes: 30
 
@@ -53,7 +58,7 @@ jobs:
             --apiKey 38F6WA87DU \
             --apiIssuer 73c7355a-beef-4d79-919d-c3d7dec7747a
 
-      - name: 🚀 Compile, Embed CarPlay Entitlements & Export to TestFlight
+      - name: 🔨 Compile Release Archive & Verify CarPlay Entitlements (Anti-Leap 7)
         run: |
           mkdir -p build/archive build/output
           xcodebuild archive \
@@ -85,9 +90,23 @@ jobs:
           EOF
 
           codesign --force --sign - --entitlements build/archive_entitlements.plist build/archive/HandsFreeVocab.xcarchive/Products/Applications/HandsFreeVocab.app
-          echo "🔎 Verifying Embedded Archive Entitlements:"
-          codesign -d --entitlements :- build/archive/HandsFreeVocab.xcarchive/Products/Applications/HandsFreeVocab.app
+          echo "🔎 Verifying Embedded Archive Entitlements & Info.plist Scene Manifest:"
+          ENT_OUT=$(codesign -d --entitlements :- build/archive/HandsFreeVocab.xcarchive/Products/Applications/HandsFreeVocab.app 2>&1)
+          echo "$ENT_OUT"
+          echo "$ENT_OUT" | grep -q "com.apple.developer.carplay-audio" || { echo "❌ Missing CarPlay Audio entitlement"; exit 1; }
+          plutil -p build/archive/HandsFreeVocab.xcarchive/Products/Applications/HandsFreeVocab.app/Info.plist | grep -q "CarPlaySceneDelegate" || { echo "❌ Missing CarPlaySceneDelegate in Info.plist"; exit 1; }
+          echo "✓ Release Archive & CarPlay Entitlements Verified!"
 
+      - name: 📦 Upload Compiled Archive Artifact (Ready for Approval)
+        uses: actions/upload-artifact@v4
+        with:
+          name: HandsFreeVocab-Release-xcarchive
+          path: build/archive/HandsFreeVocab.xcarchive
+          retention-days: 7
+
+      - name: 🚀 Export & Upload to App Store Connect TestFlight (On Approval)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_testflight != 'false'
+        run: |
           xcodebuild -exportArchive \
             -archivePath build/archive/HandsFreeVocab.xcarchive \
             -exportOptionsPlist ExportOptions.plist \

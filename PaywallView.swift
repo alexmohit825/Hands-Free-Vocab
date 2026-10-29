@@ -1,103 +1,106 @@
 import SwiftUI
 import StoreKit
 
-/// Driver-safe, high-converting paywall modal for Orator: Executive Lexicon.
+/// Editorial Book-Plate Paywall Modal for Orator: Executive Lexicon.
 /// Highlights the 1,800-word collegiate repository, 60 sets, and one-time $4.99 lifetime ownership.
 public struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var storeManager = StoreKitManager.shared
+
+    private let canvasParchment = Color(red: 0.937, green: 0.925, blue: 0.894) // #EFECE4
+    private let cardWhite = Color.white
+    private let warmLinen = Color(red: 0.969, green: 0.961, blue: 0.941)
+    private let inkCharcoal = Color(red: 0.110, green: 0.133, blue: 0.133)     // #1C2222
+    private let slateMuted = Color(red: 0.345, green: 0.400, blue: 0.400)
+    private let coastalSage = Color(red: 0.451, green: 0.620, blue: 0.608)     // #739E9B
+    private let matchaMint = Color(red: 0.710, green: 0.839, blue: 0.612)      // #B5D69C
+    private let coralTerracotta = Color(red: 0.878, green: 0.455, blue: 0.357)
+    private let warmGold = Color(red: 0.949, green: 0.788, blue: 0.298)
 
     public init() {}
 
     public var body: some View {
         NavigationStack {
             ZStack {
-                // Background dark gradient
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.08, blue: 0.14),
-                        Color(red: 0.02, green: 0.03, blue: 0.06)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                canvasParchment.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: 24) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 22) {
                         // Header Badge
                         HStack(spacing: 6) {
                             Image(systemName: "sparkles")
-                                .foregroundColor(.yellow)
-                                .font(.system(size: 12))
+                                .foregroundColor(inkCharcoal)
+                                .font(.system(size: 12, weight: .bold))
                             Text("ONE-TIME PURCHASE • ZERO SUBSCRIPTIONS")
-                                .font(.system(size: 10, weight: .black, design: .monospaced))
-                                .foregroundColor(.yellow)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundColor(inkCharcoal)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.yellow.opacity(0.12))
-                        .cornerRadius(20)
-                        .padding(.top, 10)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(warmGold)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(inkCharcoal, lineWidth: 1.4)
+                        )
+                        .padding(.top, 8)
 
                         // Title & Subtitle
                         VStack(spacing: 8) {
-                            Text("Unlock Lifetime Access")
-                                .font(.system(.title, design: .rounded))
-                                .fontWeight(.black)
-                                .foregroundColor(.white)
+                            Text("Unlock the Complete Executive Lexicon")
+                                .font(.system(size: 28, weight: .bold, design: .serif))
+                                .foregroundColor(inkCharcoal)
                                 .multilineTextAlignment(.center)
 
-                            Text("Master all 1,800 collegiate and executive words hands-free on your daily commute.")
-                                .font(.system(.subheadline, design: .rounded))
-                                .foregroundColor(.gray)
+                            Text("Master all 1,800 collegiate, literary, and medicolegal words hands-free on your daily commute.")
+                                .font(.system(size: 15, weight: .regular, design: .serif))
+                                .foregroundColor(slateMuted)
                                 .multilineTextAlignment(.center)
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, 12)
                         }
 
                         // Feature Highlights Card
                         VStack(spacing: 16) {
                             featureRow(
                                 icon: "crown.fill",
-                                color: .orange,
+                                fill: warmGold,
                                 title: "1,800 Curated Words Across 60 Sets",
                                 subtitle: "Complete curricula across Executive & Orator, GRE, Classic Literary & Medicolegal tracks."
                             )
 
                             featureRow(
-                                icon: "arrow.triangle.2.circlepath.circle.fill",
-                                color: .cyan,
-                                title: "Continuous Cross-Set Autoplay",
-                                subtitle: "Seamlessly transitions from set to set with spoken milestone announcements and calibrated pauses."
+                                icon: "car.fill",
+                                fill: coastalSage.opacity(0.45),
+                                title: "CarPlay & Hands-Free Knowledge Checks",
+                                subtitle: "Seamless set-to-set autoplay and spoken 3-question recall quizzes behind the wheel."
                             )
 
                             featureRow(
                                 icon: "waveform",
-                                color: .green,
+                                fill: matchaMint,
                                 title: "0ms On-Device Speech Radar",
-                                subtitle: "Whisper-quiet voice commands ('Next', 'Repeat', 'Mastered', 'Explain', 'Root') without cellular latency."
+                                subtitle: "Instant offline voice commands ('Next', 'Repeat', 'Explain', 'Root') with zero cloud lag."
                             )
 
                             featureRow(
-                                icon: "bolt.shield.fill",
-                                color: .purple,
-                                title: "Zero Ads • Zero Telemetry",
-                                subtitle: "100% on-device local execution with lifetime access and zero recurring monthly fees."
+                                icon: "checkmark.shield.fill",
+                                fill: coralTerracotta.opacity(0.35),
+                                title: "Pay Once • Own Forever",
+                                subtitle: "100% private on-device execution with zero recurring monthly subscription traps."
                             )
                         }
                         .padding(20)
-                        .background(Color(white: 0.08))
-                        .cornerRadius(20)
+                        .background(cardWhite)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(inkCharcoal, lineWidth: 1.5)
                         )
 
-                        // Error Banner
                         if let error = storeManager.errorMessage {
                             Text(error)
-                                .font(.system(size: 12))
-                                .foregroundColor(.red)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundColor(coralTerracotta)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         }
@@ -115,22 +118,25 @@ public struct PaywallView: View {
                                 HStack {
                                     if storeManager.isPurchasing {
                                         ProgressView()
-                                            .tint(.black)
+                                            .tint(inkCharcoal)
                                     } else {
                                         Text("Unlock All 60 Sets • \(priceString)")
-                                            .font(.system(.headline, design: .rounded))
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.black)
+                                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                                            .foregroundColor(inkCharcoal)
                                     }
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 54)
-                                .background(Color.yellow)
-                                .cornerRadius(16)
+                                .background(coastalSage)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(inkCharcoal, lineWidth: 1.6)
+                                )
+                                .shadow(color: inkCharcoal.opacity(0.18), radius: 0, x: 0, y: 3)
                             }
                             .disabled(storeManager.isPurchasing)
 
-                            // Restore Purchases Button
                             Button {
                                 Task {
                                     await storeManager.restorePurchases()
@@ -139,26 +145,24 @@ public struct PaywallView: View {
                                     }
                                 }
                             } label: {
-                                Text("Restore Purchases")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(.gray)
+                                Text("Restore Previous Purchase")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundColor(slateMuted)
                             }
                             .disabled(storeManager.isPurchasing)
                         }
-                        .padding(.top, 8)
 
-                        // Legal Footnote
                         VStack(spacing: 4) {
-                            Text("Payment is charged to your Apple ID upon confirmation.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.gray.opacity(0.7))
+                            Text("One-time payment charged to your Apple ID upon confirmation.")
+                                .font(.system(size: 11, design: .rounded))
+                                .foregroundColor(slateMuted)
 
                             HStack(spacing: 16) {
                                 Link("Privacy Policy", destination: URL(string: "https://alexmohit825.github.io/Hands-Free-Vocab/privacy.html")!)
                                 Link("Support Guide", destination: URL(string: "https://alexmohit825.github.io/Hands-Free-Vocab/")!)
                             }
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.orange.opacity(0.8))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundColor(inkCharcoal)
                         }
                         .padding(.bottom, 24)
                     }
@@ -172,35 +176,42 @@ public struct PaywallView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
+                            .foregroundColor(inkCharcoal)
                             .font(.system(size: 22))
                     }
                 }
             }
         }
+        .preferredColorScheme(.light)
     }
 
     private var priceString: String {
         storeManager.lifetimeProduct?.displayPrice ?? "$4.99"
     }
 
-    private func featureRow(icon: String, color: Color, title: String, subtitle: String) -> some View {
+    private func featureRow(icon: String, fill: Color, title: String, subtitle: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(color)
-                .frame(width: 28, height: 28)
-                .background(color.opacity(0.15))
-                .cornerRadius(8)
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(fill)
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(inkCharcoal, lineWidth: 1.3)
+                    )
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(inkCharcoal)
+            }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(.system(size: 15, weight: .bold, design: .serif))
+                    .foregroundColor(inkCharcoal)
 
                 Text(subtitle)
-                    .font(.system(size: 12))
-                    .foregroundColor(.gray)
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundColor(slateMuted)
                     .lineSpacing(2)
             }
             Spacer()

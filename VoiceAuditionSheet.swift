@@ -2,11 +2,10 @@
 //  VoiceAuditionSheet.swift
 //  Orator: Executive Lexicon
 //
-//  100% On-Device Voice Audition & Selection Studio:
+//  Apple Design Award Editorial Voice Audition Studio:
+//  - Warm Editorial Parchment (#EFECE4), Crisp White cards, and Coastal Sage-Teal (#739E9B) accents.
 //  - Discovers all high-fidelity Apple speech voices installed on the iPhone.
 //  - Badges Premium, Enhanced, and Alex breathing models.
-//  - Interactive 1-tap sample preview.
-//  - Persists preference locally with zero cloud dependencies.
 //
 
 import SwiftUI
@@ -20,6 +19,15 @@ public struct VoiceAuditionSheet: View {
     @State private var previewingVoiceID: String? = nil
     @State private var isSpeakingPreview: Bool = false
 
+    private let canvasParchment = Color(red: 0.937, green: 0.925, blue: 0.894) // #EFECE4
+    private let cardWhite = Color.white
+    private let warmLinen = Color(red: 0.969, green: 0.961, blue: 0.941)
+    private let inkCharcoal = Color(red: 0.110, green: 0.133, blue: 0.133)     // #1C2222
+    private let slateMuted = Color(red: 0.345, green: 0.400, blue: 0.400)
+    private let coastalSage = Color(red: 0.451, green: 0.620, blue: 0.608)     // #739E9B
+    private let matchaMint = Color(red: 0.710, green: 0.839, blue: 0.612)      // #B5D69C
+    private let warmGold = Color(red: 0.949, green: 0.788, blue: 0.298)
+
     private var voices: [AVSpeechSynthesisVoice] {
         AudioCache.availableEnglishVoices
     }
@@ -29,21 +37,17 @@ public struct VoiceAuditionSheet: View {
     public var body: some View {
         NavigationStack {
             ZStack {
-                Color(red: 0.08, green: 0.09, blue: 0.12).ignoresSafeArea()
+                canvasParchment.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Header Guidance Card
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 18) {
                         guidanceCard
-
-                        // Tip for Apple Enhanced Studio Voices
                         enhancedVoiceTipCard
 
-                        // Voice List
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Installed English Voices (\(voices.count))")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.gray)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(slateMuted)
                                 .textCase(.uppercase)
 
                             ForEach(voices, id: \.identifier) { voice in
@@ -62,65 +66,66 @@ public struct VoiceAuditionSheet: View {
                         previewSynthesizer.stopSpeaking(at: .immediate)
                         dismiss()
                     }
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.orange)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundColor(inkCharcoal)
                 }
             }
             .onDisappear {
                 previewSynthesizer.stopSpeaking(at: .immediate)
             }
         }
+        .preferredColorScheme(.light)
     }
-
-    // MARK: - Guidance Cards
 
     private var guidanceCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "iphone.radiowaves.left.and.right")
-                    .foregroundColor(.orange)
-                    .font(.system(size: 20))
-                Text("100% On-Device Synthesis")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(coastalSage)
+                    .font(.system(size: 18, weight: .bold))
+                Text("100% On-Device Neural Synthesis")
+                    .font(.system(size: 17, weight: .bold, design: .serif))
+                    .foregroundColor(inkCharcoal)
             }
 
-            Text("Orator uses Apple's native neural speech engine. It works completely offline in your vehicle with zero cloud delay, zero data usage, and zero recurring server costs.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.8))
+            Text("Orator uses Apple's native neural speech engine. It works completely offline in your vehicle with zero cloud delay and zero cellular data usage.")
+                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .foregroundColor(slateMuted)
                 .lineSpacing(3)
         }
         .padding(16)
-        .background(Color.white.opacity(0.06))
-        .cornerRadius(14)
+        .background(cardWhite)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(inkCharcoal, lineWidth: 1.5)
+        )
     }
 
     private var enhancedVoiceTipCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
-                    .foregroundColor(.yellow)
-                    .font(.system(size: 16))
-                Text("Pro-Tip: Get Studio Quality Free")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.yellow)
+                    .foregroundColor(inkCharcoal)
+                    .font(.system(size: 15, weight: .bold))
+                Text("Pro-Tip: Unlock Studio Voices Free")
+                    .font(.system(size: 14, weight: .bold, design: .serif))
+                    .foregroundColor(inkCharcoal)
             }
 
-            Text("For the most natural human inflection and breathing dynamics, open iPhone **Settings > Accessibility > Spoken Content > Voices > English** and tap the download icon next to **Ava (Enhanced)**, **Zoe (Enhanced)**, or **Alex**. They will appear here automatically.")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundColor(.white.opacity(0.85))
+            Text("For the most natural human inflection, open iPhone Settings > Accessibility > Spoken Content > Voices > English and download Ava (Enhanced), Zoe (Enhanced), or Alex.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundColor(inkCharcoal.opacity(0.85))
                 .lineSpacing(2)
         }
         .padding(14)
-        .background(Color.yellow.opacity(0.12))
+        .background(warmGold.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(inkCharcoal, lineWidth: 1.4)
         )
-        .cornerRadius(12)
     }
-
-    // MARK: - Voice Row
 
     private func voiceRow(_ voice: AVSpeechSynthesisVoice) -> some View {
         let isSelected = voiceManager.selectedVoiceIdentifier == voice.identifier
@@ -130,62 +135,64 @@ public struct VoiceAuditionSheet: View {
             voiceManager.selectVoice(identifier: voice.identifier)
         } label: {
             HStack(spacing: 14) {
-                // Selection indicator
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
-                    .foregroundColor(isSelected ? .orange : .gray.opacity(0.5))
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(isSelected ? coastalSage : slateMuted.opacity(0.5))
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(voice.name)
-                            .font(.system(size: 16, weight: isSelected ? .bold : .semibold))
-                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .bold, design: .serif))
+                            .foregroundColor(inkCharcoal)
 
                         qualityBadge(for: voice)
                     }
 
                     HStack(spacing: 8) {
                         Text(voice.language)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.gray)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(slateMuted)
 
                         Text("•")
                             .font(.system(size: 10))
-                            .foregroundColor(.gray)
+                            .foregroundColor(slateMuted)
 
                         Text(voice.gender == .male ? "Male" : (voice.gender == .female ? "Female" : "Neutral"))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.gray)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(slateMuted)
                     }
                 }
 
                 Spacer()
 
-                // Audition Play Button
                 Button {
                     previewVoice(voice)
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: isPreviewing ? "stop.fill" : "speaker.wave.2.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 11, weight: .bold))
                         Text(isPreviewing ? "Stop" : "Sample")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
                     }
-                    .foregroundColor(isPreviewing ? .yellow : .white)
-                    .padding(.horizontal, 10)
+                    .foregroundColor(inkCharcoal)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(isPreviewing ? Color.yellow.opacity(0.2) : Color.white.opacity(0.1))
-                    .cornerRadius(8)
+                    .background(isPreviewing ? warmGold : warmLinen)
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(inkCharcoal, lineWidth: 1.2)
+                    )
                 }
                 .buttonStyle(.plain)
             }
             .padding(14)
-            .background(isSelected ? Color.orange.opacity(0.12) : Color.white.opacity(0.05))
+            .background(isSelected ? matchaMint.opacity(0.35) : cardWhite)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.orange.opacity(0.4) : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(inkCharcoal, lineWidth: isSelected ? 1.8 : 1.3)
             )
-            .cornerRadius(12)
         }
         .buttonStyle(.plain)
     }
@@ -193,37 +200,29 @@ public struct VoiceAuditionSheet: View {
     @ViewBuilder
     private func qualityBadge(for voice: AVSpeechSynthesisVoice) -> some View {
         if voice.identifier.contains("Alex") || voice.name.lowercased() == "alex" {
-            Text("Apple Breath Model")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.orange)
-                .padding(.horizontal, 6)
+            Text("Breath Model")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(inkCharcoal)
+                .padding(.horizontal, 7)
                 .padding(.vertical, 2)
-                .background(Color.orange.opacity(0.2))
-                .cornerRadius(6)
+                .background(warmGold)
+                .clipShape(Capsule())
         } else if voice.quality == .premium {
             Text("Premium")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.purple)
-                .padding(.horizontal, 6)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(inkCharcoal)
+                .padding(.horizontal, 7)
                 .padding(.vertical, 2)
-                .background(Color.purple.opacity(0.2))
-                .cornerRadius(6)
+                .background(matchaMint)
+                .clipShape(Capsule())
         } else if voice.quality == .enhanced {
             Text("Enhanced")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.blue)
-                .padding(.horizontal, 6)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(inkCharcoal)
+                .padding(.horizontal, 7)
                 .padding(.vertical, 2)
-                .background(Color.blue.opacity(0.2))
-                .cornerRadius(6)
-        } else {
-            Text("Standard")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.gray)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.white.opacity(0.08))
-                .cornerRadius(6)
+                .background(coastalSage.opacity(0.4))
+                .clipShape(Capsule())
         }
     }
 
