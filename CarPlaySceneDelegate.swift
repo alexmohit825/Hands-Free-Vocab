@@ -58,7 +58,8 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
             templates.append(buildTierListTemplate(for: tier))
         }
 
-        let tabBar = CPTabBarTemplate(templates: templates)
+        let safeTemplates = Array(templates.prefix(5))
+        let tabBar = CPTabBarTemplate(templates: safeTemplates)
         return tabBar
     }
 
@@ -106,8 +107,10 @@ public final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationScene
     private func startDriveSession(deck: [VocabWord], index: Int) {
         VoiceManager.shared.startDeck(deck, startingAt: index)
 
-        // Push Now Playing Template so the vehicle head unit shows the word, track info, and playback progress
+        // Push Now Playing Template safely if not already presented
         let nowPlaying = CPNowPlayingTemplate.shared
-        interfaceController?.pushTemplate(nowPlaying, animated: true, completion: nil)
+        if interfaceController?.topTemplate !== nowPlaying {
+            interfaceController?.pushTemplate(nowPlaying, animated: true, completion: nil)
+        }
     }
 }

@@ -98,13 +98,21 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     public func configureAudioSessionIfNeeded(forcePlaybackCategory: Bool = false) {
         let session = AVAudioSession.sharedInstance()
         do {
-            // Using .playback with .allowBluetoothA2DP / .allowAirPlay guarantees crystal clear
-            // CarPlay and vehicle audio delivery matching Apple Music and Podcasts (Zero mic route collision).
-            try session.setCategory(.playback,
-                                    mode: .spokenAudio,
-                                    options: [.allowBluetoothA2DP, .allowAirPlay])
+            if isCarPlayConnected || forcePlaybackCategory {
+                // In CarPlay, head units require .playback to prevent route collision with cabin mic bus
+                try session.setCategory(.playback,
+                                        mode: .spokenAudio,
+                                        options: [.allowBluetoothA2DP, .allowAirPlay])
+            } else {
+                // On iPhone, .playAndRecord enables simultaneous speech recognition and audio playback.
+                // .defaultToSpeaker guarantees loud bottom speaker playback (never whisper earpiece).
+                // .allowBluetooth and .allowBluetoothA2DP guarantee high-fidelity vehicle Bluetooth audio.
+                try session.setCategory(.playAndRecord,
+                                        mode: .spokenAudio,
+                                        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+            }
             try session.setActive(true, options: [])
-            print("[VoiceManager] Audio session active with .playback / .spokenAudio")
+            print("[VoiceManager] Audio session active: category=\(session.category.rawValue), mode=\(session.mode.rawValue)")
         } catch {
             print("[VoiceManager] Audio session setCategory error: \(error)")
         }
@@ -299,6 +307,13 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         directSynthesizer?.stopSpeaking(at: .immediate)
 
         guard !activeDeck.isEmpty else { return }
+
+        // If no word is currently active, begin deck at the current index
+        if currentWord == nil {
+            activeIndex = max(0, min(activeIndex, activeDeck.count - 1))
+            presentWord(activeDeck[activeIndex])
+            return
+        }
         let nextIndex = activeIndex + offset
         if nextIndex >= 0 && nextIndex < activeDeck.count {
             let previousSet = activeDeck[activeIndex].setNumber
@@ -599,22 +614,33 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
         isPlaying = false
         playbackModeDescription = "Paused"
         republishNowPlayingRate()
-        VoiceCommander.shared.stopListening()
+
+        // Keep microphone listening on iPhone so the driver can say "Resume" or "Play" hands-free
+        if !isCarPlayConnected {
+            VoiceCommander.shared.startContinuousListening()
+        } else {
+            VoiceCommander.shared.stopListening()
+        }
     }
 
     public func resumeStudySession() {
         if let player = player, !player.isPlaying {
             player.play()
             isPlaying = true
+            VoiceCommander.shared.stopListening()
             republishNowPlayingRate()
         } else if let synth = directSynthesizer, synth.isPaused {
             synth.continueSpeaking()
             isPlaying = true
+            VoiceCommander.shared.stopListening()
             republishNowPlayingRate()
         } else if isQuizMode {
             presentNextQuizQuestion()
         } else if let word = currentWord {
             presentWord(word)
+        } else {
+            // First run invocation: start deck from beginning
+            startDeck(activeDeck.isEmpty ? CurriculumData.words : activeDeck, startingAt: 0)
         }
     }
 
@@ -623,7 +649,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
     public func speakWordTrack(wordId: String? = nil, kind: String? = nil, text: String, completion: @escaping () -> Void) {
         configureAudioSessionIfNeeded()
 
-        // Temporarily pause speech recognition while speaking to prevent feedback/audio conflicts
+        // Crucial: Mark isPlaying = true upfront to prevent mic from starting or self-triggering
+        self.isPlaying = true
         VoiceCommander.shared.stopListening()
 
         player?.stop()
@@ -632,6 +659,8 @@ public final class VoiceManager: NSObject, AVAudioPlayerDelegate, AVSpeechSynthe
 
         self.completionHandler = { [weak self] in
             guard let self = self else { return }
+            self.isPlaying = false
+            self.republishNowPlayingRate()
             if !self.isCarPlayConnected {
                 VoiceCommander.shared.startContinuousListening()
             }

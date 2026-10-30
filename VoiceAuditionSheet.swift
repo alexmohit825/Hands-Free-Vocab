@@ -231,8 +231,14 @@ public struct VoiceAuditionSheet: View {
             previewSynthesizer.stopSpeaking(at: .immediate)
             isSpeakingPreview = false
             previewingVoiceID = nil
+            if !voiceManager.isCarPlayConnected && !voiceManager.isPlaying {
+                VoiceCommander.shared.startContinuousListening()
+            }
             return
         }
+
+        VoiceCommander.shared.stopListening()
+        voiceManager.configureAudioSessionIfNeeded()
 
         previewSynthesizer.stopSpeaking(at: .immediate)
         previewingVoiceID = voice.identifier

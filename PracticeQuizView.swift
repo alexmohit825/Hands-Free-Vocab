@@ -673,6 +673,9 @@ public struct PracticeQuizView: View {
     }
 
     private func speakWord(_ text: String) {
+        VoiceCommander.shared.stopListening()
+        voiceManager.configureAudioSessionIfNeeded()
+
         previewSynth.stopSpeaking(at: .immediate)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AudioCache.pickBestVoice()
